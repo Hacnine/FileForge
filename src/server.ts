@@ -1,9 +1,24 @@
+import { execSync } from "child_process";
 import app from "./app";
 import { env } from "./config/env";
 import prisma from "./config/database";
 
+const runMigrations = () => {
+  try {
+    console.log("Running database migrations...");
+    execSync("npx prisma migrate deploy", { stdio: "inherit" });
+    console.log("Migrations applied successfully");
+  } catch (error) {
+    console.error("Migration failed:", error);
+    process.exit(1);
+  }
+};
+
 const startServer = async () => {
   try {
+    // Run migrations before anything else
+    runMigrations();
+
     // Test database connection
     await prisma.$connect();
     console.log("Database connected successfully");

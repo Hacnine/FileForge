@@ -1,4 +1,4 @@
-import prisma from "../config/database";
+import prisma from "../../config/database";
 
 /**
  * Recalculate and update storage used for a user.
@@ -9,7 +9,7 @@ export const syncUserStorageUsed = async (userId: string): Promise<bigint> => {
     where: { userId, isDeleted: false },
     _sum: { size: true },
   });
-  const total = BigInt(result._sum.size ?? 0);
+  const total = result._sum.size ?? BigInt(0);
   await prisma.user.update({ where: { id: userId }, data: { storageUsed: total } });
   return total;
 };
@@ -19,7 +19,7 @@ export const syncUserStorageUsed = async (userId: string): Promise<bigint> => {
  */
 export const incrementStorageUsed = async (
   userId: string,
-  bytes: number
+  bytes: number | bigint
 ): Promise<void> => {
   await prisma.user.update({
     where: { id: userId },
@@ -32,7 +32,7 @@ export const incrementStorageUsed = async (
  */
 export const decrementStorageUsed = async (
   userId: string,
-  bytes: number
+  bytes: number | bigint
 ): Promise<void> => {
   await prisma.user.update({
     where: { id: userId },
@@ -46,7 +46,7 @@ export const decrementStorageUsed = async (
  */
 export const checkStorageQuota = async (
   userId: string,
-  incomingBytes: number
+  incomingBytes: number | bigint
 ): Promise<{ allowed: boolean; used: bigint; limit: bigint }> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },

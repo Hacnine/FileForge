@@ -1,4 +1,4 @@
-import prisma from "../config/database";
+import prisma from "../../config/database";
 import { AuditAction, Prisma } from "@prisma/client";
 import { Request } from "express";
 
@@ -20,7 +20,10 @@ export const createAuditLog = async (options: AuditOptions): Promise<void> => {
         resource: resource ?? null,
         ipAddress: req ? getClientIp(req) : null,
         userAgent: req?.headers["user-agent"] ?? null,
-        metadata: metadata !== undefined ? (metadata as Prisma.InputJsonValue) : Prisma.DbNull,
+        metadata:
+          metadata !== undefined
+            ? (metadata as Prisma.InputJsonValue)
+            : Prisma.DbNull,
       },
     });
   } catch {
@@ -31,7 +34,9 @@ export const createAuditLog = async (options: AuditOptions): Promise<void> => {
 function getClientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
-    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0];
+    const first = Array.isArray(forwarded)
+      ? forwarded[0]
+      : forwarded.split(",")[0];
     return first.trim();
   }
   return req.socket?.remoteAddress ?? "";

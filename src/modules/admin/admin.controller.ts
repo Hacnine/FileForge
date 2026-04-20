@@ -1,42 +1,36 @@
 import { Request, Response, NextFunction } from "express";
-import prisma from "../config/database";
-import { AppError } from "../middleware/errorHandler";
-import { AuthRequest } from "../middleware/auth";
-import { createAuditLog } from "../utils/auditLog";
+import prisma from "../../config/database";
+import { AppError } from "../../common/middleware/errorHandler";
+import { AuthRequest } from "../../common/middleware/auth";
+import { createAuditLog } from "../../common/utils/auditLog";
 
 // Public endpoint – no auth required
 export const getPublicPackages = async (
   _req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   try {
-    const packages = await prisma.subscriptionPackage.findMany();
+    const packages = await prisma.subscriptionPackage.findMany({
+      where: { isActive: true },
+    });
     res.json(packages);
   } catch (error) {
     next(new AppError("Failed to retrieve packages", 500));
   }
 };
 
-/**
- * Get all subscription packages (Admin only)
- */
 export const getPackages = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user || req.user.role !== "ADMIN") {
     return next(new AppError("Only admins can view all packages", 403));
   }
-
   try {
     const packages = await prisma.subscriptionPackage.findMany({
-      include: {
-        _count: {
-          select: { activeUsers: true },
-        },
-      },
+      include: { _count: { select: { activeUsers: true } } },
       orderBy: { createdAt: "desc" },
     });
     res.json(packages);
@@ -45,18 +39,14 @@ export const getPackages = async (
   }
 };
 
-/**
- * Get a single package by ID (Admin only)
- */
 export const getPackageById = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user || req.user.role !== "ADMIN") {
     return next(new AppError("Only admins can view package details", 403));
   }
-
   try {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -64,35 +54,24 @@ export const getPackageById = async (
 
     const pkg = await prisma.subscriptionPackage.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: { activeUsers: true },
-        },
-      },
+      include: { _count: { select: { activeUsers: true } } },
     });
 
-    if (!pkg) {
-      return next(new AppError("Package not found", 404));
-    }
-
+    if (!pkg) return next(new AppError("Package not found", 404));
     res.status(200).json(pkg);
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * Create a new subscription package (Admin only)
- */
 export const createPackage = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user || req.user.role !== "ADMIN") {
     return next(new AppError("Only admins can create packages", 403));
   }
-
   try {
     const {
       name,
@@ -104,13 +83,9 @@ export const createPackage = async (
       filesPerFolder,
     } = req.body;
 
-    // Validate inputs
     if (!name || typeof name !== "string" || name.trim() === "") {
-      return next(
-        new AppError("Package name is required and must be valid", 400)
-      );
+      return next(new AppError("Package name is required and must be valid", 400));
     }
-
     if (
       maxFolders === undefined ||
       maxNestingLevel === undefined ||
@@ -119,37 +94,16 @@ export const createPackage = async (
       totalFileLimit === undefined ||
       filesPerFolder === undefined
     ) {
-      return next(
-        new AppError("All package limits and settings are required", 400)
-      );
+      return next(new AppError("All package limits and settings are required", 400));
     }
-
     if (!Array.isArray(allowedFileTypes) || allowedFileTypes.length === 0) {
-      return next(
-        new AppError("Allowed file types must be a non-empty array", 400)
-      );
+      return next(new AppError("Allowed file types must be a non-empty array", 400));
     }
 
-    const validFileTypes = ["IMAGE", "VIDEO", "PDF", "AUDIO"];
-    for (const type of allowedFileTypes) {
-      if (!validFileTypes.includes(type)) {
-        return next(
-          new AppError(
-            `Invalid file type: ${type}. Allowed types: ${validFileTypes.join(", ")}`,
-            400
-          )
-        );
-      }
-    }
-
-    // Check if package name already exists
     const existing = await prisma.subscriptionPackage.findUnique({
       where: { name: name.trim() },
     });
-
-    if (existing) {
-      return next(new AppError("Package name already exists", 409));
-    }
+    if (existing) return next(new AppError("Package name already exists", 409));
 
     const newPackage = await prisma.subscriptionPackage.create({
       data: {
@@ -171,22 +125,23 @@ export const createPackage = async (
   }
 };
 
-/**
- * Update a subscription package (Admin only)
- */
 export const updatePackage = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user || req.user.role !== "ADMIN") {
     return next(new AppError("Only admins can update packages", 403));
   }
-
   try {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
     if (!id) return next(new AppError("Package ID is required", 400));
+
+    const existing = await prisma.subscriptionPackage.findUnique({
+      where: { id: String(id) },
+    });
+    if (!existing) return next(new AppError("Package not found", 404));
 
     const {
       name,
@@ -198,66 +153,40 @@ export const updatePackage = async (
       filesPerFolder,
     } = req.body;
 
-    const existing = await prisma.subscriptionPackage.findUnique({
-      where: { id: String(id) },
-    });
-
-    if (!existing) {
-      return next(new AppError("Package not found", 404));
-    }
-
     const updateData: any = {};
 
     if (name !== undefined) {
       if (typeof name !== "string" || name.trim() === "") {
-        return next(
-          new AppError("Package name must be a non-empty string", 400)
-        );
+        return next(new AppError("Package name must be a non-empty string", 400));
       }
-      // Check uniqueness (excluding current package)
       const duplicate = await prisma.subscriptionPackage.findFirst({
         where: { name: name.trim(), NOT: { id: String(id) } },
       });
-      if (duplicate) {
-        return next(new AppError("Package name already exists", 409));
-      }
+      if (duplicate) return next(new AppError("Package name already exists", 409));
       updateData.name = name.trim();
     }
 
-    if (maxFolders !== undefined) {
-      updateData.maxFolders = parseInt(maxFolders);
-    }
-    if (maxNestingLevel !== undefined) {
-      updateData.maxNestingLevel = parseInt(maxNestingLevel);
-    }
+    if (maxFolders !== undefined) updateData.maxFolders = parseInt(maxFolders);
+    if (maxNestingLevel !== undefined) updateData.maxNestingLevel = parseInt(maxNestingLevel);
     if (allowedFileTypes !== undefined) {
       if (!Array.isArray(allowedFileTypes) || allowedFileTypes.length === 0) {
-        return next(
-          new AppError("Allowed file types must be a non-empty array", 400)
-        );
+        return next(new AppError("Allowed file types must be a non-empty array", 400));
       }
       const validFileTypes = ["IMAGE", "VIDEO", "PDF", "AUDIO", "OTHER"];
       for (const type of allowedFileTypes) {
         if (!validFileTypes.includes(type)) {
-          return next(
-            new AppError(
-              `Invalid file type: ${type}. Allowed types: ${validFileTypes.join(", ")}`,
-              400
-            )
-          );
+          return next(new AppError(`Invalid file type: ${type}`, 400));
         }
       }
       updateData.allowedFileTypes = allowedFileTypes;
     }
-    if (maxFileSize !== undefined) {
-      updateData.maxFileSize = parseInt(maxFileSize);
-    }
-    if (totalFileLimit !== undefined) {
-      updateData.totalFileLimit = parseInt(totalFileLimit);
-    }
-    if (filesPerFolder !== undefined) {
-      updateData.filesPerFolder = parseInt(filesPerFolder);
-    }
+    if (maxFileSize !== undefined) updateData.maxFileSize = parseInt(maxFileSize);
+    if (totalFileLimit !== undefined) updateData.totalFileLimit = parseInt(totalFileLimit);
+    if (filesPerFolder !== undefined) updateData.filesPerFolder = parseInt(filesPerFolder);
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.price !== undefined) updateData.price = req.body.price;
+    if (req.body.storageLimit !== undefined) updateData.storageLimit = BigInt(req.body.storageLimit);
+    if (typeof req.body.isActive === "boolean") updateData.isActive = req.body.isActive;
 
     const updated = await prisma.subscriptionPackage.update({
       where: { id: String(id) },
@@ -270,18 +199,14 @@ export const updatePackage = async (
   }
 };
 
-/**
- * Delete a subscription package (Admin only)
- */
 export const deletePackage = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user || req.user.role !== "ADMIN") {
     return next(new AppError("Only admins can delete packages", 403));
   }
-
   try {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -292,9 +217,7 @@ export const deletePackage = async (
       select: { _count: { select: { activeUsers: true } } },
     });
 
-    if (!pkg) {
-      return next(new AppError("Package not found", 404));
-    }
+    if (!pkg) return next(new AppError("Package not found", 404));
 
     if (pkg._count.activeUsers > 0) {
       return next(
@@ -305,10 +228,7 @@ export const deletePackage = async (
       );
     }
 
-    await prisma.subscriptionPackage.delete({
-      where: { id: String(id) },
-    });
-
+    await prisma.subscriptionPackage.delete({ where: { id: String(id) } });
     res.status(204).send();
   } catch (error) {
     next(new AppError("Failed to delete package", 500));
@@ -317,9 +237,6 @@ export const deletePackage = async (
 
 // ─── USER MANAGEMENT ──────────────────────────────────────────────────────────
 
-/**
- * GET /api/admin/users  — paginated list of all users
- */
 export const getUsers = async (
   req: AuthRequest,
   res: Response,
@@ -379,9 +296,6 @@ export const getUsers = async (
   }
 };
 
-/**
- * GET /api/admin/users/:id  — single user detail
- */
 export const getUserById = async (
   req: AuthRequest,
   res: Response,
@@ -425,9 +339,6 @@ export const getUserById = async (
   }
 };
 
-/**
- * PUT /api/admin/users/:id  — update user role or active status
- */
 export const updateUser = async (
   req: AuthRequest,
   res: Response,
@@ -444,7 +355,6 @@ export const updateUser = async (
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) return next(new AppError("User not found", 404));
 
-    // Prevent admin from demoting themselves
     if (id === req.user.id && role === "USER") {
       return next(new AppError("Cannot change your own admin role", 400));
     }
@@ -483,9 +393,6 @@ export const updateUser = async (
   }
 };
 
-/**
- * DELETE /api/admin/users/:id  — delete a user account
- */
 export const deleteUser = async (
   req: AuthRequest,
   res: Response,
@@ -523,9 +430,6 @@ export const deleteUser = async (
 
 // ─── STATS & ANALYTICS ────────────────────────────────────────────────────────
 
-/**
- * GET /api/admin/stats  — system-wide statistics
- */
 export const getStats = async (
   req: AuthRequest,
   res: Response,
@@ -566,10 +470,10 @@ export const getStats = async (
 
     const subscriptionBreakdown = await prisma.subscriptionPackage.findMany({
       where: { isActive: true },
-      include: {
-        _count: { select: { activeUsers: true } },
-      },
+      include: { _count: { select: { activeUsers: true } } },
     });
+
+    const totalOrganizations = await prisma.organization.count({ where: { isDeleted: false } });
 
     res.json({
       success: true,
@@ -578,6 +482,7 @@ export const getStats = async (
         files: totalFiles,
         folders: totalFolders,
         packages: totalPackages,
+        organizations: totalOrganizations,
         totalStorageUsed: (storageResult._sum.storageUsed ?? BigInt(0)).toString(),
         subscriptionBreakdown: subscriptionBreakdown.map((p) => ({
           id: p.id,
@@ -588,7 +493,7 @@ export const getStats = async (
         fileTypeBreakdown: fileTypeBreakdown.map((f) => ({
           type: f.fileType,
           count: f._count.id,
-          totalSize: (f._sum.size ?? 0).toString(),
+          totalSize: (f._sum.size ?? BigInt(0)).toString(),
         })),
         recentUsers,
       },
@@ -598,9 +503,6 @@ export const getStats = async (
   }
 };
 
-/**
- * GET /api/admin/audit-logs  — paginated audit logs
- */
 export const getAuditLogs = async (
   req: AuthRequest,
   res: Response,
@@ -638,6 +540,53 @@ export const getAuditLogs = async (
       logs,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── STORAGE PROVIDERS ────────────────────────────────────────────────────────
+
+export const getStorageProviders = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const providers = await prisma.storageProvider.findMany({
+      include: { _count: { select: { files: true } } },
+    });
+    res.json({ success: true, providers });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createStorageProvider = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const { name, type, bucket, region, endpoint } = req.body;
+    if (!name || !type) {
+      return next(new AppError("Name and type are required", 400));
+    }
+    const validTypes = ["s3", "gcs", "azure", "local"];
+    if (!validTypes.includes(type)) {
+      return next(new AppError(`Invalid type. Allowed: ${validTypes.join(", ")}`, 400));
+    }
+
+    const provider = await prisma.storageProvider.create({
+      data: { name, type, bucket: bucket ?? null, region: region ?? null, endpoint: endpoint ?? null },
+    });
+    res.status(201).json({ success: true, provider });
   } catch (error) {
     next(error);
   }

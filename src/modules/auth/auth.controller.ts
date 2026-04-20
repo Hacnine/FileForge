@@ -1,19 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
-import prisma from "../config/database";
-import { AppError } from "../middleware/errorHandler";
-import { AuthRequest } from "../middleware/auth";
+import prisma from "../../config/database";
+import { AppError } from "../../common/middleware/errorHandler";
+import { AuthRequest } from "../../common/middleware/auth";
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-} from "../utils/jwt";
-import { generateToken, hashToken } from "../utils/crypto";
+} from "../../common/utils/jwt";
+import { generateToken, hashToken } from "../../common/utils/crypto";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
-} from "../utils/email";
-import { createAuditLog } from "../utils/auditLog";
+} from "../../common/utils/email";
+import { createAuditLog } from "../../common/utils/auditLog";
 
 // Register a new user
 export const register = async (
@@ -28,24 +28,17 @@ export const register = async (
       throw new AppError("All fields are required.", 400);
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new AppError("User with this email already exists.", 409);
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Generate email verification token
     const verifyToken = generateToken();
     const hashedVerifyToken = hashToken(verifyToken);
 
-    // Create user
     const user = await prisma.user.create({
       data: {
         email,
@@ -53,11 +46,10 @@ export const register = async (
         firstName,
         lastName,
         emailVerifyToken: hashedVerifyToken,
-        emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
     });
 
-    // Send verification email (non-blocking)
     sendVerificationEmail(email, verifyToken).catch((err) => {
       console.error("Failed to send verification email:", err);
     });
@@ -93,31 +85,27 @@ export const login = async (
       throw new AppError("Email and password are required.", 400);
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new AppError("Invalid email or password.", 401);
     }
 
     if (!user.isActive) {
-      throw new AppError("Your account has been deactivated. Please contact support.", 403);
+      throw new AppError(
+        "Your account has been deactivated. Please contact support.",
+        403
+      );
     }
 
-    // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new AppError("Invalid email or password.", 401);
     }
 
-    // Generate tokens
     const tokenPayload = { id: user.id, email: user.email, role: user.role };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    // Save refresh token and update lastLoginAt
     await prisma.user.update({
       where: { id: user.id },
       data: { refreshToken, lastLoginAt: new Date() },
@@ -203,12 +191,9 @@ export const forgotPassword = async (
       throw new AppError("Email is required.", 400);
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // Don't reveal whether user exists
       return res.status(200).json({
         success: true,
         message:
@@ -223,7 +208,7 @@ export const forgotPassword = async (
       where: { id: user.id },
       data: {
         resetPasswordToken: hashedResetToken,
-        resetPasswordExpires: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+        resetPasswordExpires: new Date(Date.now() + 60 * 60 * 1000),
       },
     });
 
@@ -281,7 +266,7 @@ export const resetPassword = async (
         password: hashedPassword,
         resetPasswordToken: null,
         resetPasswordExpires: null,
-        refreshToken: null, // Invalidate existing sessions
+        refreshToken: null,
       },
     });
 
@@ -307,27 +292,20 @@ export const refreshAccessToken = async (
       throw new AppError("Refresh token is required.", 400);
     }
 
-    // Verify refresh token
     const decoded = verifyRefreshToken(refreshToken);
 
-    // Find user with this refresh token
     const user = await prisma.user.findFirst({
-      where: {
-        id: decoded.id,
-        refreshToken: refreshToken,
-      },
+      where: { id: decoded.id, refreshToken },
     });
 
     if (!user) {
       throw new AppError("Invalid refresh token.", 401);
     }
 
-    // Generate new tokens
     const tokenPayload = { id: user.id, email: user.email, role: user.role };
     const newAccessToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
 
-    // Update refresh token in DB
     await prisma.user.update({
       where: { id: user.id },
       data: { refreshToken: newRefreshToken },
@@ -361,10 +339,7 @@ export const logout = async (
       data: { refreshToken: null },
     });
 
-    res.status(200).json({
-      success: true,
-      message: "Logged out successfully.",
-    });
+    res.status(200).json({ success: true, message: "Logged out successfully." });
   } catch (error) {
     next(error);
   }
@@ -399,10 +374,7 @@ export const getProfile = async (
       throw new AppError("User not found.", 404);
     }
 
-    res.status(200).json({
-      success: true,
-      data: user,
-    });
+    res.status(200).json({ success: true, data: user });
   } catch (error) {
     next(error);
   }

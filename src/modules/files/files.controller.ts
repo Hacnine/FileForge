@@ -1,16 +1,13 @@
 import { Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
-import prisma from "../config/database";
-import { AppError } from "../middleware/errorHandler";
-import { AuthRequest } from "../middleware/auth";
-import { createAuditLog } from "../utils/auditLog";
-import { decrementStorageUsed } from "../utils/storage";
+import bcrypt from "bcryptjs";
+import prisma from "../../config/database";
+import { AppError } from "../../common/middleware/errorHandler";
+import { AuthRequest } from "../../common/middleware/auth";
+import { createAuditLog } from "../../common/utils/auditLog";
+import { decrementStorageUsed } from "../../common/utils/storage";
 
-/**
- * GET /api/user/files/:id/download
- * Download a file owned by the authenticated user.
- */
 export const downloadFile = async (
   req: AuthRequest,
   res: Response,
@@ -32,7 +29,6 @@ export const downloadFile = async (
       return next(new AppError("File not found on disk", 404));
     }
 
-    // Increment download count
     await prisma.file.update({
       where: { id },
       data: { downloadCount: { increment: 1 } },
@@ -54,10 +50,6 @@ export const downloadFile = async (
   }
 };
 
-/**
- * POST /api/user/files/:id/share
- * Create a share link for a file.
- */
 export const createShareLink = async (
   req: AuthRequest,
   res: Response,
@@ -111,10 +103,6 @@ export const createShareLink = async (
   }
 };
 
-/**
- * GET /api/user/files/:id/share-links
- * List all active share links for a file.
- */
 export const getShareLinks = async (
   req: AuthRequest,
   res: Response,
@@ -132,7 +120,7 @@ export const getShareLinks = async (
     }
 
     const shareLinks = await prisma.shareLink.findMany({
-      where: { fileId: id, userId },
+      where: { fileId: id, userId, isDeleted: false },
       select: {
         id: true,
         token: true,
@@ -151,10 +139,6 @@ export const getShareLinks = async (
   }
 };
 
-/**
- * DELETE /api/user/files/:id/share-links/:linkId
- * Revoke a share link.
- */
 export const revokeShareLink = async (
   req: AuthRequest,
   res: Response,
@@ -189,10 +173,6 @@ export const revokeShareLink = async (
   }
 };
 
-/**
- * GET /api/files/share/:token
- * Public: access a file via share link (download).
- */
 export const accessSharedFile = async (
   req: AuthRequest,
   res: Response,
@@ -207,7 +187,7 @@ export const accessSharedFile = async (
       include: { file: true },
     });
 
-    if (!shareLink || !shareLink.isActive) {
+    if (!shareLink || !shareLink.isActive || shareLink.isDeleted) {
       return next(new AppError("Share link not found or inactive", 404));
     }
 
@@ -236,7 +216,6 @@ export const accessSharedFile = async (
       return next(new AppError("File not found on disk", 404));
     }
 
-    // Update use count
     await prisma.shareLink.update({
       where: { id: shareLink.id },
       data: { useCount: { increment: 1 } },
@@ -255,10 +234,6 @@ export const accessSharedFile = async (
   }
 };
 
-/**
- * GET /api/user/storage
- * Get the authenticated user's storage usage summary.
- */
 export const getStorageInfo = async (
   req: AuthRequest,
   res: Response,
@@ -303,10 +278,6 @@ export const getStorageInfo = async (
   }
 };
 
-/**
- * GET /api/user/trash
- * List soft-deleted files and folders.
- */
 export const getTrash = async (
   req: AuthRequest,
   res: Response,
@@ -336,16 +307,18 @@ export const getTrash = async (
       }),
     ]);
 
-    res.json({ success: true, trash: { files, folders } });
+    res.json({
+      success: true,
+      trash: {
+        files: files.map((f) => ({ ...f, size: f.size.toString() })),
+        folders,
+      },
+    });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * POST /api/user/trash/restore/:type/:id
- * Restore a soft-deleted file or folder. type = "file" | "folder"
- */
 export const restoreFromTrash = async (
   req: AuthRequest,
   res: Response,
@@ -366,10 +339,9 @@ export const restoreFromTrash = async (
         where: { id: itemId },
         data: { isDeleted: false, deletedAt: null },
       });
-      // Restore storage count
       await prisma.user.update({
         where: { id: userId },
-        data: { storageUsed: { increment: BigInt(file.size) } },
+        data: { storageUsed: { increment: file.size } },
       });
       createAuditLog({ userId, action: "FILE_RESTORE", resource: `file:${itemId}`, req });
       return res.json({ success: true, message: "File restored" });
@@ -394,10 +366,6 @@ export const restoreFromTrash = async (
   }
 };
 
-/**
- * DELETE /api/user/trash
- * Permanently delete all trashed items.
- */
 export const emptyTrash = async (
   req: AuthRequest,
   res: Response,
@@ -406,15 +374,12 @@ export const emptyTrash = async (
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
   try {
-    // Get all trashed files to delete from disk
     const trashedFiles = await prisma.file.findMany({
       where: { userId, isDeleted: true },
-      select: { id: true, path: true, size: true },
+      select: { id: true, path: true },
     });
 
-    let totalBytes = 0;
     for (const f of trashedFiles) {
-      totalBytes += f.size;
       try {
         if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
       } catch {
@@ -434,10 +399,6 @@ export const emptyTrash = async (
   }
 };
 
-/**
- * GET /api/user/search
- * Search files and folders by name/type. Query params: q, type
- */
 export const search = async (
   req: AuthRequest,
   res: Response,
@@ -505,15 +466,19 @@ export const search = async (
         : [],
     ]);
 
-    res.json({ success: true, results: { files, folders }, query: q });
+    res.json({
+      success: true,
+      results: {
+        files: (files as any[]).map((f: any) => ({ ...f, size: f.size?.toString() })),
+        folders,
+      },
+      query: q,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * GET /api/user/notifications
- */
 export const getNotifications = async (
   req: AuthRequest,
   res: Response,
@@ -548,9 +513,6 @@ export const getNotifications = async (
   }
 };
 
-/**
- * PATCH /api/user/notifications/:id/read
- */
 export const markNotificationRead = async (
   req: AuthRequest,
   res: Response,
@@ -574,9 +536,6 @@ export const markNotificationRead = async (
   }
 };
 
-/**
- * PATCH /api/user/notifications/read-all
- */
 export const markAllNotificationsRead = async (
   req: AuthRequest,
   res: Response,
@@ -595,9 +554,6 @@ export const markAllNotificationsRead = async (
   }
 };
 
-/**
- * DELETE /api/user/notifications/:id
- */
 export const deleteNotification = async (
   req: AuthRequest,
   res: Response,
@@ -609,9 +565,7 @@ export const deleteNotification = async (
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
-    const result = await prisma.notification.deleteMany({
-      where: { id, userId },
-    });
+    const result = await prisma.notification.deleteMany({ where: { id, userId } });
     if (result.count === 0) {
       return next(new AppError("Notification not found", 404));
     }
@@ -621,9 +575,6 @@ export const deleteNotification = async (
   }
 };
 
-/**
- * GET /api/user/tags
- */
 export const getTags = async (
   req: AuthRequest,
   res: Response,
@@ -633,7 +584,7 @@ export const getTags = async (
   const userId = req.user.id;
   try {
     const tags = await prisma.tag.findMany({
-      where: { userId },
+      where: { userId, isDeleted: false },
       include: { _count: { select: { fileTags: true } } },
       orderBy: { name: "asc" },
     });
@@ -643,9 +594,6 @@ export const getTags = async (
   }
 };
 
-/**
- * POST /api/user/tags
- */
 export const createTag = async (
   req: AuthRequest,
   res: Response,
@@ -667,9 +615,6 @@ export const createTag = async (
   }
 };
 
-/**
- * DELETE /api/user/tags/:id
- */
 export const deleteTag = async (
   req: AuthRequest,
   res: Response,
@@ -681,7 +626,11 @@ export const deleteTag = async (
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
-    const result = await prisma.tag.deleteMany({ where: { id, userId } });
+    // Soft-delete the tag
+    const result = await prisma.tag.updateMany({
+      where: { id, userId, isDeleted: false },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
     if (result.count === 0) {
       return next(new AppError("Tag not found", 404));
     }
@@ -691,9 +640,6 @@ export const deleteTag = async (
   }
 };
 
-/**
- * POST /api/user/files/:id/tags
- */
 export const addTagToFile = async (
   req: AuthRequest,
   res: Response,
@@ -732,9 +678,6 @@ export const addTagToFile = async (
   }
 };
 
-/**
- * DELETE /api/user/files/:id/tags/:tagId
- */
 export const removeTagFromFile = async (
   req: AuthRequest,
   res: Response,
@@ -760,9 +703,6 @@ export const removeTagFromFile = async (
   }
 };
 
-/**
- * GET /api/user/profile  - update profile
- */
 export const updateProfile = async (
   req: AuthRequest,
   res: Response,
@@ -798,11 +738,6 @@ export const updateProfile = async (
     next(error);
   }
 };
-
-/**
- * PUT /api/user/password  - change password
- */
-import bcrypt from "bcryptjs";
 
 export const changePassword = async (
   req: AuthRequest,

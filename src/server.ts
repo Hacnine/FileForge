@@ -1,3 +1,8 @@
+// BigInt JSON serialization
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 import { execSync } from "child_process";
 import app from "./app";
 import { env } from "./config/env";

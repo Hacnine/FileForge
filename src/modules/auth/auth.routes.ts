@@ -8,9 +8,9 @@ import {
   refreshAccessToken,
   logout,
   getProfile,
-} from "../controllers/auth.controller";
-import { authenticate } from "../middleware/auth";
-import { authLimiter } from "../middleware/rateLimiter";
+} from "./auth.controller";
+import { authenticate } from "../../common/middleware/auth";
+import { authLimiter } from "../../common/middleware/rateLimiter";
 
 const router = Router();
 

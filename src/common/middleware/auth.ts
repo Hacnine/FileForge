@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { env } from "../config/env";
-import prisma from "../config/database";
+import { env } from "../../config/env";
+import prisma from "../../config/database";
 import { AppError } from "./errorHandler";
 
 export interface AuthRequest extends Request {

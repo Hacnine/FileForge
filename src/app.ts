@@ -1,3 +1,8 @@
+// BigInt JSON serialization (must be before any BigInt values hit res.json)
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -5,8 +10,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
 import { env } from "./config/env";
-import { errorHandler } from "./middleware/errorHandler";
-import { globalLimiter } from "./middleware/rateLimiter";
+import { errorHandler } from "./common/middleware/errorHandler";
+import { globalLimiter } from "./common/middleware/rateLimiter";
 import routes from "./routes";
 
 const app = express();

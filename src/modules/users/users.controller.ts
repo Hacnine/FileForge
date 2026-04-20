@@ -1,30 +1,27 @@
 import { Response, NextFunction } from "express";
-import prisma from "../config/database";
-import { AppError } from "../middleware/errorHandler";
-import { AuthRequest } from "../middleware/auth";
+import prisma from "../../config/database";
+import { AppError } from "../../common/middleware/errorHandler";
+import { AuthRequest } from "../../common/middleware/auth";
 import {
   validateFolderCreation,
   validateFileUpload,
   calculateNestingLevel,
   getSubscriptionInfo,
-} from "../utils/subscriptionEnforcer";
-import { createAuditLog } from "../utils/auditLog";
-import { incrementStorageUsed, decrementStorageUsed } from "../utils/storage";
+} from "../../common/utils/subscriptionEnforcer";
+import { createAuditLog } from "../../common/utils/auditLog";
+import { incrementStorageUsed, decrementStorageUsed } from "../../common/utils/storage";
 
 export const subscribePackage = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
   try {
     const { packageId } = req.body;
-    if (!packageId) {
-      throw new AppError("Package ID is required", 400);
-    }
+    if (!packageId) throw new AppError("Package ID is required", 400);
 
-    // ensure the package exists
     const subscriptionPackage = await prisma.subscriptionPackage.findUnique({
       where: { id: packageId },
     });
@@ -32,7 +29,6 @@ export const subscribePackage = async (
       throw new AppError("Subscription package not found", 404);
     }
 
-    // make sure user does not already have an active package
     const userRecord = await prisma.user.findUnique({
       where: { id: userId },
       select: { activePackageId: true },
@@ -41,8 +37,8 @@ export const subscribePackage = async (
       return next(
         new AppError(
           "You already have an active subscription. Cancel it before subscribing to a new plan.",
-          400,
-        ),
+          400
+        )
       );
     }
 
@@ -59,18 +55,16 @@ export const subscribePackage = async (
       resource: `package:${packageId}`,
       req,
     });
-    res
-      .status(200)
-      .json({ message: "Subscription package updated successfully" });
+    res.status(200).json({ message: "Subscription package updated successfully" });
   } catch (error) {
-    next(new AppError("Failed to subscribe to package", 500));
+    next(error);
   }
 };
 
 export const unsubscribePackage = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -79,17 +73,16 @@ export const unsubscribePackage = async (
       where: { id: userId },
       data: { activePackageId: null },
     });
-    res
-      .status(200)
-      .json({ message: "Subscription package removed successfully" });
+    res.status(200).json({ message: "Subscription package removed successfully" });
   } catch (error) {
     next(new AppError("Failed to unsubscribe from package", 500));
   }
 };
+
 export const getSubscriptionHistory = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -107,17 +100,14 @@ export const getSubscriptionHistory = async (
 export const createFolder = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
   try {
     const { name } = req.body;
-    if (!name) {
-      throw new AppError("Folder name is required", 400);
-    }
+    if (!name) throw new AppError("Folder name is required", 400);
 
-    // Validate subscription limits
     await validateFolderCreation(userId);
 
     const newFolder = await prisma.folder.create({
@@ -125,8 +115,10 @@ export const createFolder = async (
         name,
         userId,
         nestingLevel: 1,
+        path: `/${name}`,
       },
     });
+    createAuditLog({ userId, action: "FOLDER_CREATE", resource: `folder:${newFolder.id}`, req });
     res.status(201).json({ folder: newFolder });
   } catch (error) {
     next(error);
@@ -136,28 +128,23 @@ export const createFolder = async (
 export const createSubFolder = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
   try {
     const { name, parentId } = req.body;
-    if (!name) {
-      throw new AppError("Folder name is required", 400);
-    }
-    
+    if (!name) throw new AppError("Folder name is required", 400);
+
+    let parentPath = "";
     if (parentId) {
-      const parent = await prisma.folder.findUnique({
-        where: { id: parentId },
-      });
+      const parent = await prisma.folder.findUnique({ where: { id: parentId } });
       if (!parent || parent.userId !== userId) {
-        return next(
-          new AppError("Parent folder not found or not owned by user", 404),
-        );
+        return next(new AppError("Parent folder not found or not owned by user", 404));
       }
+      parentPath = parent.path ?? `/${parent.name}`;
     }
 
-    // Validate subscription limits (including nesting level)
     await validateFolderCreation(userId, parentId);
 
     const nestingLevel = await calculateNestingLevel(parentId);
@@ -168,8 +155,10 @@ export const createSubFolder = async (
         parentId,
         userId,
         nestingLevel,
+        path: `${parentPath}/${name}`,
       },
     });
+    createAuditLog({ userId, action: "FOLDER_CREATE", resource: `folder:${newFolder.id}`, req });
     res.status(201).json({ folder: newFolder });
   } catch (error) {
     next(error);
@@ -179,7 +168,7 @@ export const createSubFolder = async (
 export const getFolders = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -199,14 +188,13 @@ export const getFolders = async (
 export const deleteFolder = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
   try {
     const rawId = req.params.id;
-    const id = Array.isArray(rawId) ? rawId[0] : rawId; 
-
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     if (!id) return next(new AppError("Folder ID is required", 400));
 
     const result = await prisma.folder.updateMany({
@@ -228,20 +216,18 @@ export const deleteFolder = async (
 export const renameFolder = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
   try {
     const rawId = req.params.id;
-    const id = Array.isArray(rawId) ? rawId[0] : rawId; 
-
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     if (!id) return next(new AppError("Folder ID is required", 400));
 
     const { name } = req.body;
-    if (!name) {
-      throw new AppError("Folder name is required", 400);
-    }
+    if (!name) throw new AppError("Folder name is required", 400);
+
     const folder = await prisma.folder.findUnique({ where: { id } });
     if (!folder || folder.userId !== userId || folder.isDeleted) {
       return next(new AppError("Folder not found or not owned by user", 404));
@@ -251,6 +237,8 @@ export const renameFolder = async (
       where: { id },
       data: { name },
     });
+
+    createAuditLog({ userId, action: "FOLDER_RENAME", resource: `folder:${id}`, req });
     res.status(200).json({ folder: updatedFolder });
   } catch (error) {
     next(error);
@@ -260,12 +248,11 @@ export const renameFolder = async (
 export const moveFolder = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   try {
     const rawId = req.params.id;
-    const id = Array.isArray(rawId) ? rawId[0] : rawId; 
-
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     if (!id) return next(new AppError("Folder ID is required", 400));
     if (!req.user) return next(new AppError("Unauthorized", 401));
     const userId = req.user.id;
@@ -277,13 +264,9 @@ export const moveFolder = async (
     }
 
     if (newParentId) {
-      const parent = await prisma.folder.findUnique({
-        where: { id: newParentId },
-      });
+      const parent = await prisma.folder.findUnique({ where: { id: newParentId } });
       if (!parent || parent.userId !== userId) {
-        return next(
-          new AppError("New parent folder not found or not owned by user", 404),
-        );
+        return next(new AppError("New parent folder not found or not owned by user", 404));
       }
     }
 
@@ -291,6 +274,7 @@ export const moveFolder = async (
       where: { id },
       data: { parentId: newParentId },
     });
+    createAuditLog({ userId, action: "FOLDER_MOVE", resource: `folder:${id}`, req });
     res.status(200).json({ folder: updatedFolder });
   } catch (error) {
     next(error);
@@ -300,7 +284,7 @@ export const moveFolder = async (
 export const uploadFile = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -315,7 +299,6 @@ export const uploadFile = async (
       return next(new AppError("Folder not found or not owned by user", 404));
     }
 
-    // Validate subscription limits
     const { fileType } = await validateFileUpload(
       userId,
       file.size,
@@ -328,7 +311,7 @@ export const uploadFile = async (
         name: file.filename || file.originalname,
         originalName: file.originalname,
         mimeType: file.mimetype,
-        size: file.size,
+        size: BigInt(file.size),
         path: file.path,
         fileType,
         userId,
@@ -336,7 +319,6 @@ export const uploadFile = async (
       },
     });
 
-    // Track storage usage
     await incrementStorageUsed(userId, file.size);
 
     createAuditLog({
@@ -349,7 +331,7 @@ export const uploadFile = async (
 
     res.status(201).json({
       message: "File uploaded successfully",
-      file: created,
+      file: { ...created, size: created.size.toString() },
     });
   } catch (error) {
     next(error);
@@ -359,7 +341,7 @@ export const uploadFile = async (
 export const getFilesByFolder = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -378,7 +360,9 @@ export const getFilesByFolder = async (
       include: { fileTags: { include: { tag: true } } },
       orderBy: { createdAt: "desc" },
     });
-    res.status(200).json({ files });
+    res.status(200).json({
+      files: files.map((f) => ({ ...f, size: f.size.toString() })),
+    });
   } catch (error) {
     next(error);
   }
@@ -387,7 +371,7 @@ export const getFilesByFolder = async (
 export const renameFile = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -408,7 +392,8 @@ export const renameFile = async (
       where: { id },
       data: { name },
     });
-    res.status(200).json({ file: updated });
+    createAuditLog({ userId, action: "FILE_RENAME", resource: `file:${id}`, req });
+    res.status(200).json({ file: { ...updated, size: updated.size.toString() } });
   } catch (error) {
     next(error);
   }
@@ -417,7 +402,7 @@ export const renameFile = async (
 export const moveFile = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;
@@ -443,7 +428,8 @@ export const moveFile = async (
       where: { id },
       data: { folderId },
     });
-    res.status(200).json({ file: updated });
+    createAuditLog({ userId, action: "FILE_MOVE", resource: `file:${id}`, req });
+    res.status(200).json({ file: { ...updated, size: updated.size.toString() } });
   } catch (error) {
     next(error);
   }
@@ -452,12 +438,11 @@ export const moveFile = async (
 export const deleteFile = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   try {
     const rawId = req.params.id;
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
-
     if (!id) return next(new AppError("File ID is required", 400));
     if (!req.user) return next(new AppError("Unauthorized", 401));
     const userId = req.user.id;
@@ -467,13 +452,11 @@ export const deleteFile = async (
       return next(new AppError("File not found or not owned by user", 404));
     }
 
-    // Soft delete
     await prisma.file.update({
       where: { id },
       data: { isDeleted: true, deletedAt: new Date() },
     });
 
-    // Decrement storage
     await decrementStorageUsed(userId, file.size);
 
     createAuditLog({ userId, action: "FILE_DELETE", resource: `file:${id}`, req });
@@ -487,7 +470,7 @@ export const deleteFile = async (
 export const getSubscriptionStatus = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (!req.user) return next(new AppError("Unauthorized", 401));
   const userId = req.user.id;

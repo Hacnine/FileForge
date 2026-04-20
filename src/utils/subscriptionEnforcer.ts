@@ -71,7 +71,7 @@ export const validateFolderCreation = async (
 
   // Check max folders limit
   const folderCount = await prisma.folder.count({
-    where: { userId },
+    where: { userId, isDeleted: false },
   });
 
   if (folderCount >= limits.maxFolders) {
@@ -111,21 +111,16 @@ export const validateFileUpload = async (
   mimeType: string,
   folderId: string
 ): Promise<{
-  fileType: "IMAGE" | "VIDEO" | "PDF" | "AUDIO";
+  fileType: "IMAGE" | "VIDEO" | "PDF" | "AUDIO" | "OTHER";
 }> => {
   // admins are free to upload; only worry about file type validity
   if (await isAdminUser(userId)) {
-    let fileType: "IMAGE" | "VIDEO" | "PDF" | "AUDIO";
+    let fileType: "IMAGE" | "VIDEO" | "PDF" | "AUDIO" | "OTHER";
     if (mimeType.startsWith("image/")) fileType = "IMAGE";
     else if (mimeType.startsWith("video/")) fileType = "VIDEO";
     else if (mimeType.startsWith("audio/")) fileType = "AUDIO";
     else if (mimeType === "application/pdf") fileType = "PDF";
-    else {
-      throw new AppError(
-        "Unsupported file type. Allowed types depend on your subscription.",
-        400
-      );
-    }
+    else fileType = "OTHER";
     return { fileType };
   }
 
@@ -139,20 +134,12 @@ export const validateFileUpload = async (
   }
 
   // Validate file type
-  let fileType: "IMAGE" | "VIDEO" | "PDF" | "AUDIO";
+  let fileType: "IMAGE" | "VIDEO" | "PDF" | "AUDIO" | "OTHER";
   if (mimeType.startsWith("image/")) fileType = "IMAGE";
   else if (mimeType.startsWith("video/")) fileType = "VIDEO";
   else if (mimeType.startsWith("audio/")) fileType = "AUDIO";
-  else if (
-    mimeType === "application/pdf"
-  )
-    fileType = "PDF";
-  else {
-    throw new AppError(
-      "Unsupported file type. Allowed types depend on your subscription.",
-      400
-    );
-  }
+  else if (mimeType === "application/pdf") fileType = "PDF";
+  else fileType = "OTHER";
 
   if (!limits.allowedFileTypes.includes(fileType)) {
     throw new AppError(
@@ -170,9 +157,9 @@ export const validateFileUpload = async (
     );
   }
 
-  // Check total file count
+  // Check total file count (exclude deleted)
   const totalFileCount = await prisma.file.count({
-    where: { userId },
+    where: { userId, isDeleted: false },
   });
 
   if (totalFileCount >= limits.totalFileLimit) {
@@ -184,7 +171,7 @@ export const validateFileUpload = async (
 
   // Check files per folder limit
   const filesInFolder = await prisma.file.count({
-    where: { folderId, userId },
+    where: { folderId, userId, isDeleted: false },
   });
 
   if (filesInFolder >= limits.filesPerFolder) {
@@ -243,8 +230,8 @@ export const getSubscriptionInfo = async (userId: string) => {
 
   // Get current usage
   const [folderCount, fileCount] = await Promise.all([
-    prisma.folder.count({ where: { userId } }),
-    prisma.file.count({ where: { userId } }),
+    prisma.folder.count({ where: { userId, isDeleted: false } }),
+    prisma.file.count({ where: { userId, isDeleted: false } }),
   ]);
 
   return {

@@ -67,39 +67,55 @@ export async function seedDatabase() {
   const packages = [
     {
       name: "Free",
+      description: "Get started with basic file management features.",
+      price: 0,
       maxFolders: 5,
       maxNestingLevel: 2,
       allowedFileTypes: ["IMAGE", "PDF"] as any,
       maxFileSize: 5, // 5 MB
       totalFileLimit: 20,
       filesPerFolder: 5,
+      storageLimit: BigInt(500 * 1024 * 1024), // 500 MB
+      isActive: true,
     },
     {
       name: "Silver",
+      description: "Perfect for individuals and small teams.",
+      price: 9.99,
       maxFolders: 15,
       maxNestingLevel: 3,
       allowedFileTypes: ["IMAGE", "PDF", "AUDIO"] as any,
       maxFileSize: 20, // 20 MB
       totalFileLimit: 100,
       filesPerFolder: 15,
+      storageLimit: BigInt(5 * 1024 * 1024 * 1024), // 5 GB
+      isActive: true,
     },
     {
       name: "Gold",
+      description: "Advanced features for growing businesses.",
+      price: 24.99,
       maxFolders: 50,
       maxNestingLevel: 5,
       allowedFileTypes: ["IMAGE", "VIDEO", "PDF", "AUDIO"] as any,
       maxFileSize: 100, // 100 MB
       totalFileLimit: 500,
       filesPerFolder: 50,
+      storageLimit: BigInt(20 * 1024 * 1024 * 1024), // 20 GB
+      isActive: true,
     },
     {
       name: "Diamond",
+      description: "Unlimited power for enterprises.",
+      price: 49.99,
       maxFolders: 200,
       maxNestingLevel: 10,
-      allowedFileTypes: ["IMAGE", "VIDEO", "PDF", "AUDIO"] as any,
+      allowedFileTypes: ["IMAGE", "VIDEO", "PDF", "AUDIO", "OTHER"] as any,
       maxFileSize: 500, // 500 MB
       totalFileLimit: 2000,
       filesPerFolder: 200,
+      storageLimit: BigInt(100 * 1024 * 1024 * 1024), // 100 GB
+      isActive: true,
     },
   ];
 

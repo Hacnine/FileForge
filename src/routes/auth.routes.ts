@@ -10,15 +10,16 @@ import {
   getProfile,
 } from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth";
+import { authLimiter } from "../middleware/rateLimiter";
 
 const router = Router();
 
-// Public routes
-router.post("/register", register);
-router.post("/login", login);
+// Public routes (rate-limited)
+router.post("/register", authLimiter, register);
+router.post("/login", authLimiter, login);
 router.get("/verify-email", verifyEmail);
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password", authLimiter, resetPassword);
 router.post("/refresh-token", refreshAccessToken);
 
 // Protected routes

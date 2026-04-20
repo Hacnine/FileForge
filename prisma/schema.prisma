@@ -16,6 +16,31 @@ enum FileType {
   VIDEO
   PDF
   AUDIO
+  OTHER
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_REGISTER
+  USER_UPDATED
+  USER_DELETED
+  PASSWORD_CHANGED
+  FILE_UPLOAD
+  FILE_DOWNLOAD
+  FILE_DELETE
+  FILE_RESTORE
+  FILE_RENAME
+  FILE_MOVE
+  FILE_SHARE
+  FOLDER_CREATE
+  FOLDER_DELETE
+  FOLDER_RESTORE
+  FOLDER_RENAME
+  FOLDER_MOVE
+  SUBSCRIPTION_CHANGED
+  SHARE_LINK_CREATED
+  SHARE_LINK_REVOKED
 }
 
 model User {
@@ -26,11 +51,14 @@ model User {
   lastName             String
   role                 Role      @default(USER)
   isEmailVerified      Boolean   @default(false)
+  isActive             Boolean   @default(true)
   emailVerifyToken     String?
   emailVerifyExpires   DateTime?
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   refreshToken         String?
+  storageUsed          BigInt    @default(0)
+  lastLoginAt          DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -40,6 +68,10 @@ model User {
   subscriptionHistory SubscriptionHistory[]
   folders             Folder[]
   files               File[]
+  auditLogs           AuditLog[]
+  shareLinks          ShareLink[]
+  notifications       Notification[]
+  tags                Tag[]
 
   @@map("users")
 }
@@ -47,12 +79,16 @@ model User {
 model SubscriptionPackage {
   id               String     @id @default(uuid())
   name             String     @unique
+  description      String?
+  price            Decimal    @default(0) @db.Decimal(10, 2)
   maxFolders       Int
   maxNestingLevel  Int
   allowedFileTypes FileType[]
-  maxFileSize      Int // in MB
+  maxFileSize      Int        // in MB
   totalFileLimit   Int
   filesPerFolder   Int
+  storageLimit     BigInt     @default(0) // in bytes, 0 = unlimited
+  isActive         Boolean    @default(true)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
@@ -77,13 +113,16 @@ model SubscriptionHistory {
 }
 
 model Folder {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   name         String
+  description  String?
   userId       String
   parentId     String?
-  nestingLevel Int      @default(1)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  nestingLevel Int       @default(1)
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent   Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
@@ -94,20 +133,119 @@ model Folder {
 }
 
 model File {
-  id           String   @id @default(uuid())
-  name         String
-  originalName String
-  mimeType     String
-  size         Int // in bytes
-  path         String
-  fileType     FileType
-  userId       String
-  folderId     String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  originalName  String
+  mimeType      String
+  size          Int       // in bytes
+  path          String
+  fileType      FileType
+  userId        String
+  folderId      String
+  isDeleted     Boolean   @default(false)
+  deletedAt     DateTime?
+  downloadCount Int       @default(0)
+  checksum      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  folder Folder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder    Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  shareLinks ShareLink[]
+  versions   FileVersion[]
+  fileTags   FileTag[]
 
   @@map("files")
+}
+
+model FileVersion {
+  id         String   @id @default(uuid())
+  fileId     String
+  versionNum Int
+  path       String
+  size       Int
+  checksum   String?
+  createdAt  DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@map("file_versions")
+}
+
+model ShareLink {
+  id        String    @id @default(uuid())
+  token     String    @unique @default(uuid())
+  fileId    String
+  userId    String
+  expiresAt DateTime?
+  maxUses   Int?
+  useCount  Int       @default(0)
+  isActive  Boolean   @default(true)
+  password  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("share_links")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  color     String?  @default("#6366f1")
+  userId    String
+  createdAt DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileTags FileTag[]
+
+  @@unique([name, userId])
+  @@map("tags")
+}
+
+model FileTag {
+  fileId String
+  tagId  String
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, tagId])
+  @@map("file_tags")
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  action     AuditAction
+  resource   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info") // info | success | warning | error
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
 }

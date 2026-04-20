@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import prisma from "../config/database";
 import { AppError } from "../middleware/errorHandler";
 import { AuthRequest } from "../middleware/auth";
+import { createAuditLog } from "../utils/auditLog";
 
 // Public endpoint – no auth required
 export const getPublicPackages = async (
@@ -153,12 +154,15 @@ export const createPackage = async (
     const newPackage = await prisma.subscriptionPackage.create({
       data: {
         name: name.trim(),
+        description: req.body.description ?? null,
+        price: req.body.price ?? 0,
         maxFolders: parseInt(maxFolders),
         maxNestingLevel: parseInt(maxNestingLevel),
         allowedFileTypes,
         maxFileSize: parseInt(maxFileSize),
         totalFileLimit: parseInt(totalFileLimit),
         filesPerFolder: parseInt(filesPerFolder),
+        storageLimit: req.body.storageLimit ? BigInt(req.body.storageLimit) : BigInt(0),
       },
     });
     res.status(201).json(newPackage);
@@ -232,7 +236,7 @@ export const updatePackage = async (
           new AppError("Allowed file types must be a non-empty array", 400)
         );
       }
-      const validFileTypes = ["IMAGE", "VIDEO", "PDF", "AUDIO"];
+      const validFileTypes = ["IMAGE", "VIDEO", "PDF", "AUDIO", "OTHER"];
       for (const type of allowedFileTypes) {
         if (!validFileTypes.includes(type)) {
           return next(
@@ -308,5 +312,333 @@ export const deletePackage = async (
     res.status(204).send();
   } catch (error) {
     next(new AppError("Failed to delete package", 500));
+  }
+};
+
+// ─── USER MANAGEMENT ──────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/users  — paginated list of all users
+ */
+export const getUsers = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
+    const skip = (page - 1) * limit;
+    const search = typeof req.query.search === "string" ? req.query.search : undefined;
+    const role = typeof req.query.role === "string" ? req.query.role : undefined;
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: "insensitive" } },
+        { firstName: { contains: search, mode: "insensitive" } },
+        { lastName: { contains: search, mode: "insensitive" } },
+      ];
+    }
+    if (role === "ADMIN" || role === "USER") where.role = role;
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isEmailVerified: true,
+          isActive: true,
+          storageUsed: true,
+          lastLoginAt: true,
+          createdAt: true,
+          activePackage: { select: { id: true, name: true } },
+          _count: { select: { files: true, folders: true } },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      users: users.map((u) => ({ ...u, storageUsed: u.storageUsed.toString() })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/admin/users/:id  — single user detail
+ */
+export const getUserById = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isEmailVerified: true,
+        isActive: true,
+        storageUsed: true,
+        lastLoginAt: true,
+        createdAt: true,
+        activePackage: { select: { id: true, name: true, storageLimit: true } },
+        subscriptionHistory: {
+          include: { package: { select: { id: true, name: true } } },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        },
+        _count: { select: { files: true, folders: true } },
+      },
+    });
+
+    if (!user) return next(new AppError("User not found", 404));
+
+    res.json({ success: true, user: { ...user, storageUsed: user.storageUsed.toString() } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/admin/users/:id  — update user role or active status
+ */
+export const updateUser = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const { role, isActive, firstName, lastName } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return next(new AppError("User not found", 404));
+
+    // Prevent admin from demoting themselves
+    if (id === req.user.id && role === "USER") {
+      return next(new AppError("Cannot change your own admin role", 400));
+    }
+
+    const data: any = {};
+    if (role === "ADMIN" || role === "USER") data.role = role;
+    if (typeof isActive === "boolean") data.isActive = isActive;
+    if (firstName) data.firstName = firstName.trim();
+    if (lastName) data.lastName = lastName.trim();
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        isEmailVerified: true,
+      },
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      action: "USER_UPDATED",
+      resource: `user:${id}`,
+      metadata: { changes: data },
+      req,
+    });
+
+    res.json({ success: true, user: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/admin/users/:id  — delete a user account
+ */
+export const deleteUser = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+
+    if (id === req.user.id) {
+      return next(new AppError("Cannot delete your own account", 400));
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return next(new AppError("User not found", 404));
+
+    await prisma.user.delete({ where: { id } });
+
+    createAuditLog({
+      userId: req.user.id,
+      action: "USER_DELETED",
+      resource: `user:${id}`,
+      metadata: { deletedEmail: user.email },
+      req,
+    });
+
+    res.json({ success: true, message: "User deleted successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── STATS & ANALYTICS ────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/stats  — system-wide statistics
+ */
+export const getStats = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const [
+      totalUsers,
+      activeUsers,
+      totalFiles,
+      totalFolders,
+      totalPackages,
+      storageResult,
+      recentUsers,
+      fileTypeBreakdown,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.file.count({ where: { isDeleted: false } }),
+      prisma.folder.count({ where: { isDeleted: false } }),
+      prisma.subscriptionPackage.count({ where: { isActive: true } }),
+      prisma.user.aggregate({ _sum: { storageUsed: true } }),
+      prisma.user.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { id: true, email: true, firstName: true, lastName: true, createdAt: true },
+      }),
+      prisma.file.groupBy({
+        by: ["fileType"],
+        where: { isDeleted: false },
+        _count: { id: true },
+        _sum: { size: true },
+      }),
+    ]);
+
+    const subscriptionBreakdown = await prisma.subscriptionPackage.findMany({
+      where: { isActive: true },
+      include: {
+        _count: { select: { activeUsers: true } },
+      },
+    });
+
+    res.json({
+      success: true,
+      stats: {
+        users: { total: totalUsers, active: activeUsers },
+        files: totalFiles,
+        folders: totalFolders,
+        packages: totalPackages,
+        totalStorageUsed: (storageResult._sum.storageUsed ?? BigInt(0)).toString(),
+        subscriptionBreakdown: subscriptionBreakdown.map((p) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          activeUsers: p._count.activeUsers,
+        })),
+        fileTypeBreakdown: fileTypeBreakdown.map((f) => ({
+          type: f.fileType,
+          count: f._count.id,
+          totalSize: (f._sum.size ?? 0).toString(),
+        })),
+        recentUsers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/admin/audit-logs  — paginated audit logs
+ */
+export const getAuditLogs = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== "ADMIN") {
+    return next(new AppError("Admin access required", 403));
+  }
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit as string) || 50);
+    const skip = (page - 1) * limit;
+    const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+    const action = typeof req.query.action === "string" ? req.query.action : undefined;
+
+    const where: any = {};
+    if (userId) where.userId = userId;
+    if (action) where.action = action;
+
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        include: {
+          user: { select: { email: true, firstName: true, lastName: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      logs,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    next(error);
   }
 };

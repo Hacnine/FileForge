@@ -13,6 +13,7 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from "../utils/email";
+import { createAuditLog } from "../utils/auditLog";
 
 // Register a new user
 export const register = async (
@@ -61,6 +62,8 @@ export const register = async (
       console.error("Failed to send verification email:", err);
     });
 
+    createAuditLog({ action: "USER_REGISTER", metadata: { email }, req });
+
     res.status(201).json({
       success: true,
       message:
@@ -99,6 +102,10 @@ export const login = async (
       throw new AppError("Invalid email or password.", 401);
     }
 
+    if (!user.isActive) {
+      throw new AppError("Your account has been deactivated. Please contact support.", 403);
+    }
+
     // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
@@ -110,11 +117,13 @@ export const login = async (
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    // Save refresh token
+    // Save refresh token and update lastLoginAt
     await prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken },
+      data: { refreshToken, lastLoginAt: new Date() },
     });
+
+    createAuditLog({ userId: user.id, action: "USER_LOGIN", req });
 
     res.status(200).json({
       success: true,

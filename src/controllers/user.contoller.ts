@@ -8,6 +8,8 @@ import {
   calculateNestingLevel,
   getSubscriptionInfo,
 } from "../utils/subscriptionEnforcer";
+import { createAuditLog } from "../utils/auditLog";
+import { incrementStorageUsed, decrementStorageUsed } from "../utils/storage";
 
 export const subscribePackage = async (
   req: AuthRequest,
@@ -50,6 +52,12 @@ export const subscribePackage = async (
         activePackageId: packageId,
         subscriptionHistory: { create: { packageId } },
       },
+    });
+    createAuditLog({
+      userId,
+      action: "SUBSCRIPTION_CHANGED",
+      resource: `package:${packageId}`,
+      req,
     });
     res
       .status(200)
@@ -177,7 +185,10 @@ export const getFolders = async (
   const userId = req.user.id;
   try {
     const folders = await prisma.folder.findMany({
-      where: { userId },
+      where: { userId, isDeleted: false },
+      include: {
+        _count: { select: { files: true, children: true } },
+      },
     });
     res.status(200).json({ folders });
   } catch (error) {
@@ -198,15 +209,17 @@ export const deleteFolder = async (
 
     if (!id) return next(new AppError("Folder ID is required", 400));
 
-    const result = await prisma.folder.deleteMany({
-      where: { id, userId },
+    const result = await prisma.folder.updateMany({
+      where: { id, userId, isDeleted: false },
+      data: { isDeleted: true, deletedAt: new Date() },
     });
 
     if (result.count === 0) {
       return next(new AppError("Folder not found or not owned by user", 404));
     }
 
-    res.status(200).json({ message: "Folder deleted successfully" });
+    createAuditLog({ userId, action: "FOLDER_DELETE", resource: `folder:${id}`, req });
+    res.status(200).json({ message: "Folder moved to trash" });
   } catch (error) {
     next(error);
   }
@@ -230,7 +243,7 @@ export const renameFolder = async (
       throw new AppError("Folder name is required", 400);
     }
     const folder = await prisma.folder.findUnique({ where: { id } });
-    if (!folder || folder.userId !== userId) {
+    if (!folder || folder.userId !== userId || folder.isDeleted) {
       return next(new AppError("Folder not found or not owned by user", 404));
     }
 
@@ -323,6 +336,17 @@ export const uploadFile = async (
       },
     });
 
+    // Track storage usage
+    await incrementStorageUsed(userId, file.size);
+
+    createAuditLog({
+      userId,
+      action: "FILE_UPLOAD",
+      resource: `file:${created.id}`,
+      metadata: { fileName: file.originalname, size: file.size },
+      req,
+    });
+
     res.status(201).json({
       message: "File uploaded successfully",
       file: created,
@@ -350,7 +374,8 @@ export const getFilesByFolder = async (
     }
 
     const files = await prisma.file.findMany({
-      where: { folderId, userId },
+      where: { folderId, userId, isDeleted: false },
+      include: { fileTags: { include: { tag: true } } },
       orderBy: { createdAt: "desc" },
     });
     res.status(200).json({ files });
@@ -431,18 +456,29 @@ export const deleteFile = async (
 ) => {
   try {
     const rawId = req.params.id;
-    const id = Array.isArray(rawId) ? rawId[0] : rawId; 
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
     if (!id) return next(new AppError("File ID is required", 400));
     if (!req.user) return next(new AppError("Unauthorized", 401));
     const userId = req.user.id;
 
-    const result = await prisma.file.deleteMany({ where: { id, userId } });
-    if (result.count === 0) {
+    const file = await prisma.file.findUnique({ where: { id } });
+    if (!file || file.userId !== userId || file.isDeleted) {
       return next(new AppError("File not found or not owned by user", 404));
     }
 
-    res.status(200).json({ message: "File deleted successfully" });
+    // Soft delete
+    await prisma.file.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+
+    // Decrement storage
+    await decrementStorageUsed(userId, file.size);
+
+    createAuditLog({ userId, action: "FILE_DELETE", resource: `file:${id}`, req });
+
+    res.status(200).json({ message: "File moved to trash" });
   } catch (error) {
     next(error);
   }

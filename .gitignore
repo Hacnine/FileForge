@@ -3,7 +3,7 @@ node_modules/
 
 # Env files
 .env
-
+PRO_BACKEND_UPGRADE_PLAN.md
 
 # Build output
 dist/

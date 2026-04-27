@@ -10,6 +10,12 @@ import {
 } from "../../common/utils/jwt";
 import { generateToken, hashToken } from "../../common/utils/crypto";
 import {
+  clearAuthCookies,
+  getRefreshTokenFromRequest,
+  getStoredRefreshTokenCandidates,
+  setAuthCookies,
+} from "../../common/utils/authSession";
+import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from "../../common/utils/email";
@@ -105,13 +111,15 @@ export const login = async (
     const tokenPayload = { id: user.id, email: user.email, role: user.role };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
+    const storedRefreshToken = hashToken(refreshToken);
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken, lastLoginAt: new Date() },
+      data: { refreshToken: storedRefreshToken, lastLoginAt: new Date() },
     });
 
     createAuditLog({ userId: user.id, action: "USER_LOGIN", req });
+    setAuthCookies(res, { accessToken, refreshToken });
 
     res.status(200).json({
       success: true,
@@ -286,29 +294,45 @@ export const refreshAccessToken = async (
   next: NextFunction
 ) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = getRefreshTokenFromRequest(req);
 
     if (!refreshToken) {
       throw new AppError("Refresh token is required.", 400);
     }
 
     const decoded = verifyRefreshToken(refreshToken);
+    const storedTokenCandidates = getStoredRefreshTokenCandidates(refreshToken);
 
     const user = await prisma.user.findFirst({
-      where: { id: decoded.id, refreshToken },
+      where: {
+        id: decoded.id,
+        refreshToken: { in: storedTokenCandidates },
+      },
     });
 
     if (!user) {
+      clearAuthCookies(res);
       throw new AppError("Invalid refresh token.", 401);
+    }
+
+    if (!user.isActive) {
+      clearAuthCookies(res);
+      throw new AppError("Your account has been deactivated.", 403);
     }
 
     const tokenPayload = { id: user.id, email: user.email, role: user.role };
     const newAccessToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
+    const storedRefreshToken = hashToken(newRefreshToken);
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken: newRefreshToken },
+      data: { refreshToken: storedRefreshToken },
+    });
+
+    setAuthCookies(res, {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
     });
 
     res.status(200).json({
@@ -319,6 +343,7 @@ export const refreshAccessToken = async (
       },
     });
   } catch (error) {
+    clearAuthCookies(res);
     next(error);
   }
 };
@@ -338,6 +363,9 @@ export const logout = async (
       where: { id: req.user.id },
       data: { refreshToken: null },
     });
+
+    clearAuthCookies(res);
+    createAuditLog({ userId: req.user.id, action: "USER_LOGOUT", req });
 
     res.status(200).json({ success: true, message: "Logged out successfully." });
   } catch (error) {

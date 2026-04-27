@@ -1,20 +1,45 @@
-// BigInt JSON serialization
-(BigInt.prototype as any).toJSON = function () {
-  return this.toString();
-};
-
 import { execSync } from "child_process";
+import { Server } from "http";
 import app from "./app";
 import { env } from "./config/env";
 import prisma from "./config/database";
+import { logger } from "./common/utils/logger";
 
 const runMigrations = () => {
   try {
-    console.log("Running database migrations...");
+    logger.info("Running database migrations");
     execSync("npx prisma migrate deploy", { stdio: "inherit" });
-    console.log("Migrations applied successfully");
+    logger.info("Database migrations applied successfully");
   } catch (error) {
-    console.error("Migration failed:", error);
+    logger.fatal({ err: error }, "Database migration failed");
+    process.exit(1);
+  }
+};
+
+let server: Server | undefined;
+
+const shutdown = async (reason: string, exitCode = 0) => {
+  try {
+    logger.info({ reason }, "Shutting down server");
+
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server?.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
+
+    await prisma.$disconnect();
+    logger.info("Shutdown complete");
+    process.exit(exitCode);
+  } catch (error) {
+    logger.error({ err: error, reason }, "Shutdown failed");
     process.exit(1);
   }
 };
@@ -26,34 +51,47 @@ const startServer = async () => {
 
     // Test database connection
     await prisma.$connect();
-    console.log("Database connected successfully");
+    logger.info("Database connected successfully");
 
     try {
       const { seedDatabase } = await import("./seed");
       await seedDatabase();
     } catch (seedError) {
-      console.error("Seeding failed (non-fatal):", seedError);
+      logger.error({ err: seedError }, "Seeding failed (non-fatal)");
     }
 
-    app.listen(env.PORT, () => {
-      console.log(`Server running on port ${env.PORT}`);
-      console.log(`Environment: ${env.NODE_ENV}`);
+    server = app.listen(env.PORT, () => {
+      logger.info(
+        {
+          port: env.PORT,
+          environment: env.NODE_ENV,
+        },
+        "Server started"
+      );
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    logger.fatal({ err: error }, "Failed to start server");
     process.exit(1);
   }
 };
 
 // Graceful shutdown
 process.on("SIGINT", async () => {
-  await prisma.$disconnect();
-  process.exit(0);
+  await shutdown("SIGINT");
 });
 
 process.on("SIGTERM", async () => {
-  await prisma.$disconnect();
-  process.exit(0);
+  await shutdown("SIGTERM");
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.fatal({ reason }, "Unhandled promise rejection");
+  void shutdown("unhandledRejection", 1);
+});
+
+process.on("uncaughtException", (error) => {
+  logger.fatal({ err: error }, "Uncaught exception");
+  void shutdown("uncaughtException", 1);
 });
 
 startServer();

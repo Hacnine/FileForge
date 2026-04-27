@@ -127,7 +127,9 @@ All routes are prefixed with `/api`.
 | Method | Path          | Description                   |
 |--------|---------------|-------------------------------|
 | GET    | `/api/packages` | Public list of all packages |
-| GET    | `/api/health`   | Health check                |
+| GET    | `/api/health`   | Aggregated API + DB health  |
+| GET    | `/api/health/live` | Liveness probe           |
+| GET    | `/api/health/ready` | Readiness probe          |
 
 ---
 
@@ -195,6 +197,10 @@ npm run prisma:seed
 # 5. Start dev server
 npm run dev
 # → http://localhost:5000/api
+
+# 6. Run quality checks
+npm run test:run
+npm run build
 ```
 
 ### Environment Variables
@@ -202,14 +208,22 @@ npm run dev
 | Variable         | Description                              |
 |------------------|------------------------------------------|
 | `DATABASE_URL`   | PostgreSQL connection string             |
+| `APP_NAME`       | Service name emitted in logs and probes  |
 | `JWT_SECRET`     | Secret for signing access tokens         |
 | `JWT_REFRESH_SECRET` | Secret for signing refresh tokens    |
 | `JWT_EXPIRES_IN` | Access token TTL (e.g. `15m`)            |
 | `JWT_REFRESH_EXPIRES_IN` | Refresh token TTL (e.g. `7d`)  |
-| `FRONTEND_URL`   | Allowed CORS origin                      |
+| `FRONTEND_URL`   | Allowed CORS origins, comma-separated    |
+| `ACCESS_TOKEN_COOKIE_NAME` | Cookie name for browser access tokens |
+| `REFRESH_TOKEN_COOKIE_NAME` | Cookie name for browser refresh tokens |
+| `COOKIE_DOMAIN`  | Optional cookie domain override           |
+| `COOKIE_SAME_SITE` | Cookie SameSite policy (`lax`, `strict`, `none`) |
+| `LOG_LEVEL`      | Structured logger level (`info`, `warn`, etc.) |
 | `SMTP_HOST`      | SMTP server host                         |
 | `SMTP_PORT`      | SMTP server port                         |
 | `SMTP_USER`      | SMTP username                            |
 | `SMTP_PASS`      | SMTP password                            |
 | `NODE_ENV`       | `development` or `production`            |
 | `PORT`           | Server port (default `5000`)             |
+
+Login and refresh responses now also set `httpOnly` auth cookies. JSON token fields are still returned for backward compatibility with the current frontend.

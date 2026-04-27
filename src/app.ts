@@ -7,23 +7,25 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
-import morgan from "morgan";
 import compression from "compression";
 import { env } from "./config/env";
 import { errorHandler } from "./common/middleware/errorHandler";
 import { globalLimiter } from "./common/middleware/rateLimiter";
+import { requestContext } from "./common/middleware/requestContext";
+import {
+  getHealthStatus,
+  getLivenessStatus,
+  getReadinessStatus,
+} from "./modules/system/system.controller";
 import routes from "./routes";
 
 const app = express();
 
 // Security headers
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
-
-// Logging
-if (env.NODE_ENV !== "test") {
-  app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
-}
+app.use(requestContext);
 
 // Response compression
 app.use(compression());
@@ -31,10 +33,11 @@ app.use(compression());
 // CORS
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: env.FRONTEND_URLS,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+    exposedHeaders: ["X-Request-Id"],
   })
 );
 
@@ -46,14 +49,9 @@ app.use(cookieParser());
 app.use("/api", globalLimiter);
 
 // Health check
-app.get("/api/health", async (_req, res) => {
-  res.json({
-    success: true,
-    message: "Server is running",
-    environment: env.NODE_ENV,
-    timestamp: new Date().toISOString(),
-  });
-});
+app.get("/api/health", getHealthStatus);
+app.get("/api/health/live", getLivenessStatus);
+app.get("/api/health/ready", getReadinessStatus);
 
 // API Routes
 app.use("/api", routes);

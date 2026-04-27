@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../../config/env";
 import prisma from "../../config/database";
 import { AppError } from "./errorHandler";
+import { getAccessTokenFromRequest } from "../utils/authSession";
 
 export interface AuthRequest extends Request {
   user?: {
@@ -18,12 +19,7 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      throw new AppError("Access denied. No token provided.", 401);
-    }
-
-    const token = authHeader.split(" ")[1];
+    const token = getAccessTokenFromRequest(req);
     if (!token) {
       throw new AppError("Access denied. No token provided.", 401);
     }

@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: saasfilemanagementsystembackend
-    env: node
-    buildCommand: npm install
-    startCommand: npx prisma migrate deploy && node dist/server.js

@@ -1,0 +1,48 @@
+# Logs
+node_modules/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Output of 'npm pack'
+*.tgz
+
+# dotenv environment variables file
+
+
+
+# dist or build directory
+/dist
+/build
+.next
+
+tsconfig.tsbuildinfo
+
+# Vite cache
+node_modules/.vite
+
+# Local env files
+.local
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

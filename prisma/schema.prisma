@@ -1,0 +1,430 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum FileType {
+  IMAGE
+  VIDEO
+  PDF
+  AUDIO
+  OTHER
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_REGISTER
+  USER_UPDATED
+  USER_DELETED
+  PASSWORD_CHANGED
+  FILE_UPLOAD
+  FILE_DOWNLOAD
+  FILE_DELETE
+  FILE_RESTORE
+  FILE_RENAME
+  FILE_MOVE
+  FILE_SHARE
+  FOLDER_CREATE
+  FOLDER_DELETE
+  FOLDER_RESTORE
+  FOLDER_RENAME
+  FOLDER_MOVE
+  SUBSCRIPTION_CHANGED
+  SHARE_LINK_CREATED
+  SHARE_LINK_REVOKED
+  ORG_CREATED
+  ORG_UPDATED
+  ORG_DELETED
+  ORG_MEMBER_ADDED
+  ORG_MEMBER_REMOVED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                   String    @id @default(uuid())
+  email                String    @unique
+  password             String
+  firstName            String
+  lastName             String
+  role                 Role      @default(USER)
+  isEmailVerified      Boolean   @default(false)
+  isActive             Boolean   @default(true)
+  isDeleted            Boolean   @default(false)
+  deletedAt            DateTime?
+  emailVerifyToken     String?
+  emailVerifyExpires   DateTime?
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+  refreshToken         String?
+  storageUsed          BigInt    @default(0)
+  lastLoginAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  activePackageId String?
+  activePackage   SubscriptionPackage? @relation("ActiveSubscription", fields: [activePackageId], references: [id])
+
+  subscriptionHistory     SubscriptionHistory[]
+  folders                 Folder[]
+  files                   File[]
+  auditLogs               AuditLog[]
+  shareLinks              ShareLink[]
+  notifications           Notification[]
+  tags                    Tag[]
+  organizationMemberships OrganizationMember[]
+  ownedOrganizations      Organization[]
+  apiUsages               ApiUsage[]
+  fileActivities          FileActivity[]
+
+  @@index([email])
+  @@index([isDeleted])
+  @@map("users")
+}
+
+model Organization {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  ownerId   String
+  isActive  Boolean   @default(true)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  owner    User                 @relation(fields: [ownerId], references: [id])
+  members  OrganizationMember[]
+  folders  Folder[]
+  files    File[]
+  invoices Invoice[]
+
+  @@index([ownerId])
+  @@index([isDeleted])
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid())
+  userId         String
+  organizationId String
+  role           OrganizationRole @default(MEMBER)
+  joinedAt       DateTime         @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+model SubscriptionPackage {
+  id               String     @id @default(uuid())
+  name             String     @unique
+  description      String?
+  price            Decimal    @default(0) @db.Decimal(10, 2)
+  maxFolders       Int
+  maxNestingLevel  Int
+  allowedFileTypes FileType[]
+  maxFileSize      Int        // in MB
+  totalFileLimit   Int
+  filesPerFolder   Int
+  storageLimit     BigInt     @default(0) // in bytes, 0 = unlimited
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  activeUsers         User[]                @relation("ActiveSubscription")
+  subscriptionHistory SubscriptionHistory[]
+
+  @@map("subscription_packages")
+}
+
+model SubscriptionHistory {
+  id        String    @id @default(uuid())
+  userId    String
+  packageId String
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package SubscriptionPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_history")
+}
+
+model StorageProvider {
+  id       String   @id @default(uuid())
+  name     String
+  type     String   // s3 | gcs | azure | local
+  bucket   String?
+  region   String?
+  endpoint String?
+  isActive Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  files File[]
+
+  @@map("storage_providers")
+}
+
+model Folder {
+  id             String    @id @default(uuid())
+  name           String
+  description    String?
+  path           String?   @db.Text
+  userId         String
+  organizationId String?
+  parentId       String?
+  nestingLevel   Int       @default(1)
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  parent       Folder?       @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[]      @relation("FolderHierarchy")
+  files        File[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([isDeleted])
+  @@index([path])
+  @@map("folders")
+}
+
+model File {
+  id                String    @id @default(uuid())
+  name              String
+  originalName      String
+  mimeType          String
+  size              BigInt
+  path              String
+  fileType          FileType
+  userId            String
+  folderId          String
+  organizationId    String?
+  storageProviderId String?
+  isDeleted         Boolean   @default(false)
+  deletedAt         DateTime?
+  downloadCount     Int       @default(0)
+  checksum          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder          Folder           @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  organization    Organization?    @relation(fields: [organizationId], references: [id])
+  storageProvider StorageProvider? @relation(fields: [storageProviderId], references: [id])
+  shareLinks      ShareLink[]
+  versions        FileVersion[]
+  fileTags        FileTag[]
+  activities      FileActivity[]
+  searchIndex     SearchIndex?
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([organizationId])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@map("files")
+}
+
+model FileVersion {
+  id         String   @id @default(uuid())
+  fileId     String
+  versionNum Int
+  path       String
+  size       BigInt
+  checksum   String?
+  createdAt  DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@map("file_versions")
+}
+
+model ShareLink {
+  id             String    @id @default(uuid())
+  token          String    @unique @default(uuid())
+  fileId         String
+  userId         String
+  organizationId String?
+  expiresAt      DateTime?
+  maxUses        Int?
+  useCount       Int       @default(0)
+  isActive       Boolean   @default(true)
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+  password       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([fileId])
+  @@index([isDeleted])
+  @@map("share_links")
+}
+
+model Tag {
+  id        String    @id @default(uuid())
+  name      String
+  color     String?   @default("#6366f1")
+  userId    String
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileTags FileTag[]
+
+  @@unique([name, userId])
+  @@map("tags")
+}
+
+model FileTag {
+  fileId String
+  tagId  String
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, tagId])
+  @@map("file_tags")
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  resource  String?
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info") // info | success | warning | error
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Invoice {
+  id             String    @id @default(uuid())
+  organizationId String
+  amount         Decimal   @db.Decimal(10, 2)
+  status         String    @default("pending") // pending | paid | failed | cancelled
+  issuedAt       DateTime  @default(now())
+  paidAt         DateTime?
+  dueAt          DateTime?
+  description    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  payments     Payment[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  invoiceId String
+  method    String   // credit_card | bank_transfer | paypal
+  amount    Decimal  @db.Decimal(10, 2)
+  status    String   @default("pending") // pending | completed | failed | refunded
+  reference String?
+  createdAt DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model ApiUsage {
+  id         String   @id @default(uuid())
+  userId     String
+  endpoint   String
+  method     String
+  statusCode Int
+  duration   Int?     // in milliseconds
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("api_usage")
+}
+
+model FileActivity {
+  id        String   @id @default(uuid())
+  fileId    String
+  userId    String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([fileId])
+  @@index([userId])
+  @@map("file_activities")
+}
+
+model SearchIndex {
+  id      String @id @default(uuid())
+  fileId  String @unique
+  content String @db.Text
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@map("search_index")
+}

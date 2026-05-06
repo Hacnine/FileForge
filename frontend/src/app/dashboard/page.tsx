@@ -31,7 +31,7 @@ export default function DashboardPage() {
                 </span>
               </div>
               <span className="font-semibold text-foreground">
-                SaaS File Manager
+                File Forge
               </span>
             </div>
             <Link href="/" className="font-semibold text-foreground hover:underline flex items-center gap-1">

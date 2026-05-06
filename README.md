@@ -1,4 +1,4 @@
-# SaaS File Management System - Monorepo
+# File Forge - SaaS File Management System
 
 A modern SaaS file management system with a scalable backend and responsive frontend.
 

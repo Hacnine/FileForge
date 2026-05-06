@@ -88,9 +88,9 @@ export default function HomePage() {
           <div className="flex flex-col gap-4 items-center justify-between py-5 md:flex-row">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-sm shadow-primary/20">
-                <span className="text-primary-foreground font-bold text-sm">SF</span>
+                <span className="text-primary-foreground font-bold text-sm">FF</span>
               </div>
-              <span className="text-base font-semibold tracking-tight">SaaS File Manager</span>
+              <span className="text-base font-semibold tracking-tight">File Forge</span>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {mounted && isAuthenticated ? (
@@ -209,7 +209,7 @@ export default function HomePage() {
       <section className="py-20 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <p className="text-sm font-medium uppercase tracking-[0.3em] text-primary">Why SaaS File Manager</p>
+            <p className="text-sm font-medium uppercase tracking-[0.3em] text-primary">Why File Forge</p>
             <h2 className="mt-4 text-3xl font-bold tracking-tight">Everything your team needs to stay organized.</h2>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
               Secure storage, flexible access rules, and easy collaboration in one polished interface.
@@ -285,7 +285,7 @@ export default function HomePage() {
           )}
 
           {packages && packages.length > 0 && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
               {packages.map((pkg, index) => (
                 <Card
                   key={pkg.id}
@@ -430,7 +430,7 @@ export default function HomePage() {
 
       <footer className="border-t py-10 px-4">
         <div className="max-w-7xl mx-auto text-center text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} SaaS File Manager. All rights reserved.
+          &copy; {new Date().getFullYear()} File Forge. All rights reserved.
         </div>
       </footer>
     </div>

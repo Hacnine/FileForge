@@ -22,7 +22,7 @@ export const sendVerificationEmail = async (
   const verificationUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
 
   await transporter.sendMail({
-    from: '"SaaS File Manager" <hacninetusar@gmail.com>',
+    from: '"File Forge" <hacninetusar@gmail.com>',
     to: email,
     subject: "Verify Your Email Address",
     html: `
@@ -47,7 +47,7 @@ export const sendPasswordResetEmail = async (
   const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
 
   await transporter.sendMail({
-    from: '"SaaS File Manager" <hacninetusar@gmail.com>',
+    from: '"File Forge" <hacninetusar@gmail.com>',
     to: email,
     subject: "Reset Your Password",
     html: `

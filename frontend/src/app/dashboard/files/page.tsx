@@ -240,7 +240,7 @@ export default function FileManagerPage() {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-primary-foreground font-bold text-sm">SF</span>
               </div>
-              <span className="font-semibold text-foreground">SaaS File Manager</span>
+              <span className="font-semibold text-foreground">File Forge</span>
             </Link>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -3,7 +3,7 @@ import './globals.css';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'SaaS File Manager',
+  title: 'File Forge',
   description: 'Manage your files and folders in the cloud',
 };
 

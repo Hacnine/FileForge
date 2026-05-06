@@ -73,7 +73,7 @@ function RegisterForm() {
             </div>
             <CardTitle className="text-2xl">Create Account</CardTitle>
             <CardDescription>
-              Sign up to get started with SaaS File Manager
+              Sign up to get started with File Forge
             </CardDescription>
           </CardHeader>
 

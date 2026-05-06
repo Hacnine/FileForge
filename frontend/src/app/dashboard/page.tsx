@@ -19,46 +19,7 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Top Navbar */}
-      <nav className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">
-                  SF
-                </span>
-              </div>
-              <span className="font-semibold text-foreground">
-                File Forge
-              </span>
-            </div>
-            <Link href="/" className="font-semibold text-foreground hover:underline flex items-center gap-1">
-              <Home /> Home
-            </Link>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {user?.role === 'ADMIN' ? (
-                  <Shield className="w-4 h-4 text-primary" />
-                ) : (
-                  <User className="w-4 h-4" />
-                )}
-                <span>
-                  {user?.firstName} {user?.lastName}
-                </span>
-                <Badge variant="secondary">{user?.role}</Badge>
-              </div>
-              <Separator orientation="vertical" className="h-6" />
-              <Button variant="ghost" size="sm" onClick={logout}>
-                <LogOut className="w-4 h-4" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
+    <>
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Card>
@@ -161,6 +122,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </main>
-    </div>
+    </>
   );
 }

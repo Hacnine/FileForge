@@ -2,8 +2,7 @@
 
 Enterprise-grade SaaS file management REST API built with **Node.js · Express · TypeScript · Prisma ORM · PostgreSQL**.
 
-Live API: `https://saasfilemanagementsystembackend.onrender.com`  
-Frontend: companion Next.js app at `/frontend`
+Live API: `https://fileforge9.netlify.app`  
 
 ---
 

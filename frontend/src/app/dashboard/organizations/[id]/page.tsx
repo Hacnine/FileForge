@@ -137,34 +137,7 @@ export default function OrganizationDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 border-b border-border/40 bg-card/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-linear-to-br from-primary to-accent rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
-              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white" stroke="currentColor" strokeWidth="2">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
-            </div>
-            <span className="font-bold text-foreground">CloudVault</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard"><Button variant="ghost" size="sm" className="gap-2"><Home className="w-4 h-4" /> Dashboard</Button></Link>
-            <Link href="/dashboard/files"><Button variant="ghost" size="sm" className="gap-2"><FolderOpen className="w-4 h-4" /> Files</Button></Link>
-            <NotificationBell />
-            <Separator orientation="vertical" className="h-6" />
-            <Link href="/dashboard/settings">
-              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground"><User className="w-4 h-4" />{user?.firstName}</Button>
-            </Link>
-            {user?.role === 'ADMIN' && (
-              <Link href="/dashboard/admin"><Button variant="ghost" size="sm" className="text-blue-400"><Shield className="w-4 h-4" /></Button></Link>
-            )}
-            <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground"><LogOut className="w-4 h-4" /></Button>
-          </div>
-        </div>
-      </nav>
-
+    <>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-6">
@@ -405,6 +378,6 @@ export default function OrganizationDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

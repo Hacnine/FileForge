@@ -93,63 +93,66 @@ export async function seedDatabase() {
   const user1Email = "user1@saasfilemanager.com";
   const user2Email = "user2@saasfilemanager.com";
 
-  let admin = await prisma.user.findUnique({ where: { email: adminEmail } });
-  let user1 = await prisma.user.findUnique({ where: { email: user1Email } });
-  let user2 = await prisma.user.findUnique({ where: { email: user2Email } });
+  // Helper: bcrypt hashes always start with $2a$ or $2b$
+  const isBcryptHash = (s: string) => /^\$2[ab]\$/.test(s);
 
-  if (!admin) {
-    const salt = await bcrypt.genSalt(12);
-    admin = await prisma.user.create({
-      data: {
-        email: adminEmail,
-        password: await bcrypt.hash("Admin@123", salt),
-        firstName: "System",
-        lastName: "Admin",
-        role: "ADMIN",
-        isEmailVerified: true,
-        activePackageId: freePkg?.id,
-      },
-    });
-    console.log("  [user] admin@saasfilemanager.com created (Admin@123)");
-  } else {
-    console.log("  [user] admin already exists.");
-  }
+  const upsertUser = async (
+    email: string,
+    plainPassword: string,
+    data: Parameters<typeof prisma.user.create>[0]["data"]
+  ) => {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (!existing) {
+      const salt = await bcrypt.genSalt(12);
+      const user = await prisma.user.create({
+        data: { ...data, password: await bcrypt.hash(plainPassword, salt) },
+      });
+      console.log(`  [user] ${email} created.`);
+      return user;
+    }
+    // Fix plain-text password left by old seed
+    if (!isBcryptHash(existing.password)) {
+      const salt = await bcrypt.genSalt(12);
+      const updated = await prisma.user.update({
+        where: { email },
+        data: { password: await bcrypt.hash(plainPassword, salt) },
+      });
+      console.log(`  [user] ${email} password re-hashed (was plain text).`);
+      return updated;
+    }
+    console.log(`  [user] ${email} already exists.`);
+    return existing;
+  };
 
-  if (!user1) {
-    const salt = await bcrypt.genSalt(12);
-    user1 = await prisma.user.create({
-      data: {
-        email: user1Email,
-        password: await bcrypt.hash("User1@123", salt),
-        firstName: "User",
-        lastName: "One",
-        role: "USER",
-        isEmailVerified: true,
-        activePackageId: freePkg?.id,
-      },
-    });
-    console.log("  [user] user1@saasfilemanager.com created (User1@123)");
-  } else {
-    console.log("  [user] user1 already exists.");
-  }
+  let admin = await upsertUser("admin@saasfilemanager.com", "Admin@123", {
+    email: adminEmail,
+    password: "",
+    firstName: "System",
+    lastName: "Admin",
+    role: "ADMIN",
+    isEmailVerified: true,
+    activePackageId: freePkg?.id,
+  });
 
-  if (!user2) {
-    const salt = await bcrypt.genSalt(12);
-    user2 = await prisma.user.create({
-      data: {
-        email: user2Email,
-        password: await bcrypt.hash("User2@123", salt),
-        firstName: "User",
-        lastName: "Two",
-        role: "USER",
-        isEmailVerified: true,
-        activePackageId: silverPkg?.id,
-      },
-    });
-    console.log("  [user] user2@saasfilemanager.com created (User2@123)");
-  } else {
-    console.log("  [user] user2 already exists.");
-  }
+  let user1 = await upsertUser(user1Email, "User1@123", {
+    email: user1Email,
+    password: "",
+    firstName: "User",
+    lastName: "One",
+    role: "USER",
+    isEmailVerified: true,
+    activePackageId: freePkg?.id,
+  });
+
+  let user2 = await upsertUser(user2Email, "User2@123", {
+    email: user2Email,
+    password: "",
+    firstName: "User",
+    lastName: "Two",
+    role: "USER",
+    isEmailVerified: true,
+    activePackageId: silverPkg?.id,
+  });
 
   // ─── 4. Subscription History ─────────────────────────────────────────────────
   if (freePkg && user1) {

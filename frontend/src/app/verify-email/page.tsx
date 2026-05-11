@@ -16,7 +16,7 @@ import {
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
-  const token = searchParams.get('token') || '';
+  const token = searchParams?.get('token') || '';
 
   const { data, isLoading, isError } = useVerifyEmailQuery(token, {
     skip: !token,
@@ -104,3 +104,4 @@ export default function VerifyEmailPage() {
     </Suspense>
   );
 }
+

@@ -238,3 +238,4 @@ export interface AppNotification {
   link?: string | null;
   createdAt: string;
 }
+

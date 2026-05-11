@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthStore";
 import {
   useSubscribePackageMutation,
   useUnsubscribePackageMutation,
@@ -303,3 +303,4 @@ export function PricingCards({ packages, initialSubscriptionStatus }: PricingCar
     </section>
   );
 }
+

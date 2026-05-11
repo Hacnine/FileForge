@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useMemo } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getErrorMessage } from '@/utils/errorHelper';
@@ -566,3 +566,4 @@ export default function FileManagerPage() {
     </>
   );
 }
+

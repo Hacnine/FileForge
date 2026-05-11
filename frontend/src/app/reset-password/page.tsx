@@ -21,7 +21,7 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams?.get('token') ?? null;
   const router = useRouter();
 
   const [password, setPassword] = useState('');
@@ -170,3 +170,4 @@ export default function ResetPasswordPage() {
     </Suspense>
   );
 }
+

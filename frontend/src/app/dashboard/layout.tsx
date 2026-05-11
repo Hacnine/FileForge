@@ -9,7 +9,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
 
   // Admin section has its own layout with sidebar — skip the shell there
   if (pathname.startsWith('/dashboard/admin')) {
@@ -18,3 +18,4 @@ export default function DashboardLayout({
 
   return <DashboardShell>{children}</DashboardShell>;
 }
+

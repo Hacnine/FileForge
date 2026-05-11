@@ -5,6 +5,8 @@ export interface AuthState {
   user: User | null;
   accessToken: string | null;
   refreshToken: string | null;
+  isLoading: boolean;
+  isInitialized: boolean;
 }
 
 function getLocalItem(key: string): string | null {
@@ -42,6 +44,8 @@ const initialState: AuthState = {
   })(),
   accessToken: getLocalItem('accessToken'),
   refreshToken: getLocalItem('refreshToken'),
+  isLoading: true,
+  isInitialized: false,
 };
 
 const authSlice = createSlice({
@@ -55,6 +59,8 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.accessToken = action.payload.accessToken;
       state.refreshToken = action.payload.refreshToken;
+      state.isLoading = false;
+      state.isInitialized = true;
 
       setLocalItem('user', JSON.stringify(action.payload.user));
       setLocalItem('accessToken', action.payload.accessToken);
@@ -77,10 +83,20 @@ const authSlice = createSlice({
       setLocalItem('user', JSON.stringify(action.payload));
     },
 
+    setAuthLoading(state, action: PayloadAction<boolean>) {
+      state.isLoading = action.payload;
+    },
+
+    setAuthInitialized(state) {
+      state.isInitialized = true;
+    },
+
     logout(state) {
       state.user = null;
       state.accessToken = null;
       state.refreshToken = null;
+      state.isLoading = false;
+      state.isInitialized = true;
 
       removeLocalItem('user');
       removeLocalItem('accessToken');
@@ -89,5 +105,13 @@ const authSlice = createSlice({
   },
 });
 
-export const { setCredentials, setTokens, setUser, logout } = authSlice.actions;
+export const {
+  setCredentials,
+  setTokens,
+  setUser,
+  setAuthLoading,
+  setAuthInitialized,
+  logout,
+} = authSlice.actions;
 export default authSlice.reducer;
+

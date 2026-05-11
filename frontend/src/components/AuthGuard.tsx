@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import { Loader2 } from 'lucide-react';
 
 interface AuthGuardProps {
@@ -41,3 +41,4 @@ export default function AuthGuard({ children, requiredRole }: AuthGuardProps) {
 
   return <>{children}</>;
 }
+

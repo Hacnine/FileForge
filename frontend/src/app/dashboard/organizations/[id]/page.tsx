@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { getErrorMessage } from '@/utils/errorHelper';
@@ -86,7 +86,8 @@ function formatDate(date: string): string {
 const ROLES: OrganizationRole[] = ['ADMIN', 'MEMBER', 'VIEWER'];
 
 export default function OrganizationDetailPage() {
-  const { id: orgId } = useParams<{ id: string }>();
+  const params = useParams();
+  const orgId = Array.isArray(params?.id) ? params?.id[0] ?? '' : params?.id ?? '';
   const router = useRouter();
   const { user, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('members');

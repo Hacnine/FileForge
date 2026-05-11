@@ -1,10 +1,16 @@
 'use client';
 
-import { createContext, useContext, useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types';
 import { useAppDispatch, useAppSelector } from '../store';
-import { setCredentials, setUser, logout as logoutAction } from '../store/authSlice';
+import {
+  setCredentials,
+  setUser,
+  logout as logoutAction,
+  setAuthLoading,
+  setAuthInitialized,
+} from '../store/authSlice';
 import {
   useLoginMutation,
   useRegisterMutation,
@@ -12,7 +18,7 @@ import {
   useLazyGetProfileQuery,
 } from '../services/authApi';
 
-interface AuthContextType {
+interface AuthHookReturn {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -27,26 +33,21 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthInitializer({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch();
-
-  const user = useAppSelector((s) => s.auth.user);
-  const accessToken = useAppSelector((s) => s.auth.accessToken);
-  const [isLoading, setIsLoading] = useState(true);
-  const isAuthenticated = !!user;
-
-  const [loginMutation] = useLoginMutation();
-  const [registerMutation] = useRegisterMutation();
-  const [logoutMutation] = useLogoutMutation();
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
+  const isInitialized = useAppSelector((state) => state.auth.isInitialized);
   const [triggerGetProfile] = useLazyGetProfileQuery();
 
-  // On mount: if we have a token, verify it by fetching the profile
   useEffect(() => {
+    if (isInitialized) return;
+
     const verifyAuth = async () => {
+      dispatch(setAuthLoading(true));
+
       if (!accessToken) {
-        setIsLoading(false);
+        dispatch(setAuthLoading(false));
+        dispatch(setAuthInitialized());
         return;
       }
 
@@ -58,25 +59,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         dispatch(logoutAction());
       } finally {
-        setIsLoading(false);
+        dispatch(setAuthLoading(false));
+        dispatch(setAuthInitialized());
       }
     };
 
     verifyAuth();
-  }, [accessToken, dispatch, triggerGetProfile]);
+  }, [accessToken, dispatch, isInitialized, triggerGetProfile]);
 
-  // Redirect to /login when the store says logged-out (e.g. after token refresh failure)
-  useEffect(() => {
-    if (!isLoading && !user && !accessToken) {
-      // only redirect when it looks like the user was previously signed in
-      // (localStorage already cleared by logoutAction)
-    }
-  }, [isLoading, user, accessToken]);
+  return <>{children}</>;
+}
+
+export function useAuth(): AuthHookReturn {
+  const dispatch = useAppDispatch();
+  const user = useAppSelector((state) => state.auth.user);
+  const isLoading = useAppSelector((state) => state.auth.isLoading);
+  const isAuthenticated = Boolean(user);
+
+  const [loginMutation] = useLoginMutation();
+  const [registerMutation] = useRegisterMutation();
+  const [logoutMutation] = useLogoutMutation();
+  const [triggerGetProfile] = useLazyGetProfileQuery();
 
   const login = useCallback(
     async (email: string, password: string) => {
       const response = await loginMutation({ email, password }).unwrap();
-
       if (response.success) {
         const { user: userData, accessToken: at, refreshToken: rt } = response.data;
         dispatch(setCredentials({ user: userData, accessToken: at, refreshToken: rt }));
@@ -124,27 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [dispatch, triggerGetProfile]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated,
-        login,
-        register,
-        logout,
-        refreshProfile,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return {
+    user,
+    isLoading,
+    isAuthenticated,
+    login,
+    register,
+    logout,
+    refreshProfile,
+  };
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}

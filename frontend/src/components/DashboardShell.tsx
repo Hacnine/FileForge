@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import AuthGuard from '@/components/AuthGuard';
 import NotificationBell from '@/components/NotificationBell';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ const NAV_ITEMS = [
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const isActive = (item: typeof NAV_ITEMS[0]) => {
@@ -152,3 +152,4 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     </AuthGuard>
   );
 }
+

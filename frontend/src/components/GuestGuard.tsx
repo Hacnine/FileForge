@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import { Loader2 } from 'lucide-react';
 
 interface GuestGuardProps {
@@ -33,3 +33,4 @@ export default function GuestGuard({ children }: GuestGuardProps) {
 
   return <>{children}</>;
 }
+

@@ -45,3 +45,4 @@ export const {
   useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
 } = notificationsApi;
+

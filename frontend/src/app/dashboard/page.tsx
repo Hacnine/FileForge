@@ -1,10 +1,8 @@
 'use client';
 
-import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, User, Shield, FolderOpen, FileText, Package, Home } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthStore';
+import { Shield, FolderOpen, FileText, Package } from 'lucide-react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -13,10 +11,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <>
@@ -125,3 +122,4 @@ export default function DashboardPage() {
     </>
   );
 }
+

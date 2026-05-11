@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import GuestGuard from '@/components/GuestGuard';
 import toast from 'react-hot-toast';
 import { UserPlus, Mail, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -207,3 +207,4 @@ export default function RegisterPage() {
     </GuestGuard>
   );
 }
+

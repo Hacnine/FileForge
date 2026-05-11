@@ -8,7 +8,7 @@ import {
   useDeletePackageMutation,
 } from '@/services/packagesApi';
 import { SubscriptionPackage } from '@/types';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthStore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
@@ -401,3 +401,4 @@ export default function PackagesPage() {
     </div>
   );
 }
+

@@ -234,6 +234,63 @@ export const accessSharedFile = async (
   }
 };
 
+// Returns file + share-link metadata WITHOUT downloading the file.
+// Used by the Next.js /share/[token] page to render a preview before the user downloads.
+export const getShareLinkInfo = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const rawToken = req.params.token;
+    const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
+
+    const shareLink = await prisma.shareLink.findUnique({
+      where: { token },
+      include: {
+        file: {
+          select: {
+            originalName: true,
+            mimeType: true,
+            size: true,
+            fileType: true,
+          },
+        },
+      },
+    });
+
+    if (!shareLink || !shareLink.isActive || shareLink.isDeleted) {
+      return next(new AppError("Share link not found or inactive", 404));
+    }
+
+    if (shareLink.expiresAt && shareLink.expiresAt < new Date()) {
+      return next(new AppError("Share link has expired", 410));
+    }
+
+    if (shareLink.maxUses && shareLink.useCount >= shareLink.maxUses) {
+      return next(new AppError("Share link has reached its maximum uses", 410));
+    }
+
+    const file = shareLink.file;
+
+    res.json({
+      success: true,
+      info: {
+        fileName: file.originalName,
+        mimeType: file.mimeType,
+        size: file.size.toString(),
+        fileType: file.fileType,
+        expiresAt: shareLink.expiresAt?.toISOString() ?? null,
+        hasPassword: !!shareLink.password,
+        maxUses: shareLink.maxUses,
+        useCount: shareLink.useCount,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getStorageInfo = async (
   req: AuthRequest,
   res: Response,

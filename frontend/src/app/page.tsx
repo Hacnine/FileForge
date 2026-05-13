@@ -564,6 +564,79 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <footer className=" bg-muted/30 text-slate-300">
+        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid gap-8 lg:grid-cols-3">
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-white">File Forge</h3>
+              <p className="text-sm text-slate-400 max-w-md">
+                Cloud file management built for teams. Secure sharing, version control,
+                multi-organization collaboration, and audit-ready workflows.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+              <div>
+                <h4 className="text-sm font-semibold text-white">Product</h4>
+                <ul className="mt-4 space-y-3 text-sm text-slate-400">
+                  <li>
+                    <Link href="/pricing" className="hover:text-white">
+                      Pricing
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/login" className="hover:text-white">
+                      Sign In
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/register" className="hover:text-white">
+                      Get Started
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-white">Resources</h4>
+                <ul className="mt-4 space-y-3 text-sm text-slate-400">
+                  <li>
+                    <Link href="/" className="hover:text-white">
+                      Home
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/dashboard" className="hover:text-white">
+                      Dashboard
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/share/example-token" className="hover:text-white">
+                      Share Preview
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-white">Contact</h4>
+              <p className="text-sm text-slate-400">
+                Need help getting started? Reach out at{' '}
+                <a href="mailto:support@fileforge.com" className="text-white hover:underline">
+                  support@fileforge.com
+                </a>
+              </p>
+              <div className="flex items-center gap-3 text-sm text-slate-400">
+                <span>© {new Date().getFullYear()} File Forge</span>
+                <span className="h-1 w-1 rounded-full bg-slate-500" />
+                <span>Privacy</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
